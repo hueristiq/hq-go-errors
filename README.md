@@ -6,11 +6,11 @@
 
 ## Resource
 
-* [Features](#features)
+- [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
-* [Contributing](#contributing)
-* [Licensing](#licensing)
+- [Contributing](#contributing)
+- [Licensing](#licensing)
 
 ## Features
 
