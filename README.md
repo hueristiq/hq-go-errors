@@ -97,7 +97,7 @@ err := hqgoerrors.New("payment declined",
 	```go
 	var myErr *hqgoerrors.Error
 
-	if errors.As(err, &myErr) {
+	if hqgoerrors.As(err, &myErr) {
 		fmt.Println("Got:", myErr.Msg)
 	}
 	```
@@ -122,7 +122,8 @@ import (
 )
 
 func main() {
-	err := hqgoerrors.New("error example!")
+	err := hqgoerrors.New("root error example!", hqgoerrors.WithType("EXAMPLE_TYPE"), hqgoerrors.WithField("FIELD_KEY", "FIELD_VALUE"))
+	err = hqgoerrors.Wrap(err, "wrapped error example!")
 
 	formattedStr := hqgoerrors.ToString(err, true)
 
@@ -133,7 +134,10 @@ func main() {
 output:
 
 ```
-error example!
+wrapped error example!
+        runtime.main:/usr/local/go/src/runtime/proc.go:283
+root error example!
+        runtime.main:/usr/local/go/src/runtime/proc.go:283
         runtime.main:/usr/local/go/src/runtime/proc.go:283
 ```
 
@@ -150,7 +154,8 @@ import (
 )
 
 func main() {
-	err := hqgoerrors.New("error example!")
+	err := hqgoerrors.New("root error example!", hqgoerrors.WithType("EXAMPLE_TYPE"), hqgoerrors.WithField("FIELD_KEY", "FIELD_VALUE"))
+	err = hqgoerrors.Wrap(err, "wrapped error example!")
 
 	formattedJSON := hqgoerrors.ToJSON(err, true)
 
@@ -165,11 +170,18 @@ output:
 ```json
 {
   "root": {
-    "message": "error example!",
+    "message": "root error example!",
     "stack": [
+      "runtime.main:/usr/local/go/src/runtime/proc.go:283",
       "runtime.main:/usr/local/go/src/runtime/proc.go:283"
     ]
-  }
+  },
+  "wrap": [
+    {
+      "message": "wrapped error example!",
+      "stack": "runtime.main:/usr/local/go/src/runtime/proc.go:283"
+    }
+  ]
 }
 ```
 

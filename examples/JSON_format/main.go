@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-	err := hqgoerrors.New("error example!", hqgoerrors.WithType("EXAMPLE_TYPE"), hqgoerrors.WithField("FIELD_KEY", "FIELD_VALUE"))
+	err := hqgoerrors.New("root error example!", hqgoerrors.WithType("EXAMPLE_TYPE"), hqgoerrors.WithField("FIELD_KEY", "FIELD_VALUE"))
+	err = hqgoerrors.Wrap(err, "wrapped error example!")
 
 	formattedJSON := hqgoerrors.ToJSON(err, true)
 
