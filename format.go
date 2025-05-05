@@ -273,11 +273,11 @@ func Unpack(err error) UnpackedError {
 	for err != nil {
 		switch err := err.(type) {
 		case *root:
-			upErr.ErrRoot.Msg = err.msg
+			upErr.ErrRoot.Msg = err.message
 			upErr.ErrRoot.Stack = err.stack.get()
 		case *wrapped:
 			// prepend links in stack trace order
-			link := ErrLink{Msg: err.msg}
+			link := ErrLink{Msg: err.message}
 
 			link.Frame = err.frame.get()
 

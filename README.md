@@ -9,10 +9,23 @@
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
+	- [Creating Errors](#creating-errors)
+	- [Wrapping Errors](#wrapping-errors)
+	- [Unwrapping, `Is`, `As`, and `Cause`](#unwrapping-is-as-and-cause)
+	- [Formatting Errors](#formatting-errors)
+		- [... to String](#-to-string)
+		- [... to JSON](#-to-json)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 
 ## Features
+
+- **Full stack traces:** Capture call stacks at the point of creation and wrap points.
+- **Error chaining:** Wrap existing errors with new context while preserving traces.
+- **Error classification:** Tag errors with custom `ErrorType` values for programmatic handling.
+- **Structured fields:** Attach arbitrary key/value metadata to any error.
+- **Custom formatting:** Render errors (and traces) as strings or JSON, with inversion and filtering options.
+- **Standards-compliant:** Implements Go’s `error`, `Unwrap`, `Is`, and `As` interfaces plus extended helpers.
 
 ## Installation
 
@@ -25,6 +38,140 @@ go get -v -u github.com/hueristiq/hq-go-errors
 Make sure your Go environment is set up properly (Go 1.x or later is recommended).
 
 ## Usage
+
+### Creating Errors
+
+Creates a root error capturing the full call stack at the point of invocation.
+
+```go
+err := hqgoerrors.New("unable to load config")
+```
+
+### Wrapping Errors
+
+Wraps an existing error (including non-package errors), capturing the single frame where the wrap occurred, and preserving or extending the original stack trace.
+
+```go
+if err := load(); err != nil {
+	return hqgoerrors.Wrap(err, "load() failed")
+}
+```
+
+### Structured Types & Fields
+
+You can classify errors and attach structured data:
+
+```go
+err := hqgoerrors.New("payment declined",
+	hqgoerrors.WithType("PaymentError"),
+	hqgoerrors.WithField("order_id", 1234),
+	hqgoerrors.WithField("amount", 49.95),
+)
+```
+
+- Retrieve type:
+
+	```go
+	if e, ok := err.(hqgoerrors.Error); ok {
+		fmt.Println("Type:", e.Type())
+		fmt.Println("Fields:", e.Fields())
+	}
+	```
+
+### Unwrapping, `Is`, `As`, and `Cause`
+
+- Standard Unwrap:
+
+	```go
+	next := hqgoerrors.Unwrap(err)
+	```
+
+- Deep equality:
+
+	```go
+	if hqgoerrors.Is(err, targetErr) { … }
+	```
+
+- Type assertion:
+
+	```go
+	var myErr *hqgoerrors.Error
+
+	if errors.As(err, &myErr) {
+		fmt.Println("Got:", myErr.Msg)
+	}
+	```
+
+- Root cause:
+
+	```go
+	cause := hqgoerrors.Cause(err)
+	```
+
+### Formatting Errors
+
+#### ... to String
+
+```go
+package main
+
+import (
+	"fmt"
+
+	hqgoerrors "github.com/hueristiq/hq-go-errors"
+)
+
+func main() {
+	err := hqgoerrors.New("error example!")
+
+	formattedStr := hqgoerrors.ToString(err, true)
+
+	fmt.Println(formattedStr)
+}
+```
+
+output:
+
+```
+error example!
+        runtime.main:/usr/local/go/src/runtime/proc.go:283
+```
+
+#### ... to JSON
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	hqgoerrors "github.com/hueristiq/hq-go-errors"
+)
+
+func main() {
+	err := hqgoerrors.New("error example!")
+
+	formattedJSON := hqgoerrors.ToJSON(err, true)
+
+	bytes, _ := json.Marshal(formattedJSON)
+
+	fmt.Println(string(bytes))
+}
+```
+
+output:
+
+```json
+{
+  "root": {
+    "message": "error example!",
+    "stack": [
+      "runtime.main:/usr/local/go/src/runtime/proc.go:283"
+    ]
+  }
+}
+```
 
 ## Contributing
 

@@ -9,30 +9,33 @@ import (
 //
 // Fields:
 //   - isDeclaredGlobally bool: indicates if error occurred during package initialization
-//   - t ErrorType: error type for classification (ErrorType)
-//   - msg string: human-readable error message
+//   - errorType ErrorType: error type for classification (ErrorType)
+//   - message string: human-readable error message
 //   - fields map[string]interface{}: additional structured context (key-value pairs)
 //   - wrapped error: the underlying error being wrapped (if any)
 //   - stack *stack: captured call stack information
 type root struct {
 	isDeclaredGlobally bool
-	t                  ErrorType
-	msg                string
-	fields             map[string]interface{}
-	wrapped            error
-	stack              *stack
+
+	errorType ErrorType
+	message   string
+	fields    map[string]interface{}
+
+	wrapped error
+
+	stack *stack
 }
 
 // WithType associates a type with the error for classification purposes.
 // This enables error handling based on error categories/types.
 //
 // Parameters:
-//   - t ErrorType: the ErrorType to assign to this error
+//   - errorType ErrorType: the ErrorType to assign to this error
 //
 // Returns:
 //   - Error: the modified error (for method chaining)
-func (e *root) WithType(t ErrorType) Error {
-	e.t = t
+func (e *root) WithType(errorType ErrorType) Error {
+	e.errorType = errorType
 
 	return e
 }
@@ -42,7 +45,7 @@ func (e *root) WithType(t ErrorType) Error {
 // Returns:
 //   - ErrorType: the error's type, or empty string if untyped
 func (e root) Type() ErrorType {
-	return e.t
+	return e.errorType
 }
 
 // WithField adds a key-value pair to the error's structured context.
@@ -84,10 +87,10 @@ func (e *root) Error() string {
 	}
 
 	if e.wrapped != nil {
-		return e.msg + ": " + e.wrapped.Error()
+		return e.message + ": " + e.wrapped.Error()
 	}
 
-	return e.msg
+	return e.message
 }
 
 // Is implements error equality checking. Two errors are considered equal if:
@@ -108,10 +111,10 @@ func (e *root) Is(target error) bool {
 	}
 
 	if err, ok := target.(*root); ok {
-		return (err.t == "" || e.t == err.t) && e.msg == err.msg
+		return (err.errorType == "" || e.errorType == err.errorType) && e.message == err.message
 	}
 
-	return e.msg == target.Error()
+	return e.message == target.Error()
 }
 
 // As attempts to assign the error to the target interface.
@@ -169,29 +172,31 @@ func (e *root) StackFrames() []uintptr {
 // Unlike root, it only captures a single stack frame (where it was created).
 //
 // Fields:
-//   - t ErrorType: error type for classification (ErrorType)
-//   - msg string: human-readable error message
+//   - errorType ErrorType: error type for classification (ErrorType)
+//   - message string: human-readable error message
 //   - fields map[string]interface{}: additional structured context (key-value pairs)
 //   - err error: underlying error being wrapped
 //   - frame *frame: stack frame where the wrap occurred
 type wrapped struct {
-	t      ErrorType
-	msg    string
-	fields map[string]interface{}
-	err    error
-	frame  *frame
+	errorType ErrorType
+	message   string
+	fields    map[string]interface{}
+
+	err error
+
+	frame *frame
 }
 
 // WithType associates a type with the error for classification purposes.
 // This enables error handling based on error categories/types.
 //
 // Parameters:
-//   - t ErrorType: the ErrorType to assign to this error
+//   - errorType ErrorType: the ErrorType to assign to this error
 //
 // Returns:
 //   - Error: the modified error (for method chaining)
-func (e *wrapped) WithType(t ErrorType) Error {
-	e.t = t
+func (e *wrapped) WithType(errorType ErrorType) Error {
+	e.errorType = errorType
 
 	return e
 }
@@ -201,7 +206,7 @@ func (e *wrapped) WithType(t ErrorType) Error {
 // Returns:
 //   - ErrorType: the error's type, or empty string if untyped
 func (e wrapped) Type() ErrorType {
-	return e.t
+	return e.errorType
 }
 
 // WithField adds a key-value pair to the error's structured context.
@@ -243,10 +248,10 @@ func (e *wrapped) Error() string {
 	}
 
 	if e.err != nil {
-		return e.msg + ": " + e.err.Error()
+		return e.message + ": " + e.err.Error()
 	}
 
-	return e.msg
+	return e.message
 }
 
 // Is implements error equality checking. Two errors are considered equal if:
@@ -267,10 +272,10 @@ func (e *wrapped) Is(target error) bool {
 	}
 
 	if err, ok := target.(*wrapped); ok {
-		return (err.t == "" || e.t == err.t) && e.msg == err.msg
+		return (err.errorType == "" || e.errorType == err.errorType) && e.message == err.message
 	}
 
-	return e.msg == target.Error()
+	return e.message == target.Error()
 }
 
 // As attempts to assign the error to the target interface.
@@ -353,17 +358,17 @@ var (
 // The skip parameter (3) ensures the trace starts at the caller's location.
 //
 // Parameters:
-//   - msg string: the primary error message
+//   - message string: the primary error message
 //   - options ...Option: variadic list of Option functions to configure the error
 //
 // Returns:
 //   - error: the newly created error (implements Error interface)
-func New(msg string, options ...Option) error {
+func New(message string, options ...Option) error {
 	stack := callers(3)
 
 	e := &root{
 		isDeclaredGlobally: stack.isGlobal(),
-		msg:                msg,
+		message:            message,
 		stack:              stack,
 	}
 
@@ -406,13 +411,13 @@ func WithField(k string, v interface{}) (option Option) {
 //
 // Parameters:
 //   - err error: the error to wrap
-//   - msg string: additional context message
+//   - message string: additional context message
 //   - options ...Option: configuration options (same as New)
 //
 // Returns:
 //   - error: the new wrapping error
-func Wrap(err error, msg string, options ...Option) error {
-	w := wrap(err, msg)
+func Wrap(err error, message string, options ...Option) error {
+	w := wrap(err, message)
 
 	for _, option := range options {
 		option(w)
@@ -426,7 +431,7 @@ func Wrap(err error, msg string, options ...Option) error {
 //  1. Wrapping a root error (preserves full stack)
 //  2. Wrapping a wrapped error (finds root to preserve stack)
 //  3. Wrapping a non-package error (creates new root)
-func wrap(err error, msg string) Error {
+func wrap(err error, message string) Error {
 	if err == nil {
 		return nil
 	}
@@ -439,7 +444,7 @@ func wrap(err error, msg string) Error {
 		if e.isDeclaredGlobally {
 			err = &root{
 				isDeclaredGlobally: e.isDeclaredGlobally,
-				msg:                e.msg,
+				message:            e.message,
 				stack:              stack,
 			}
 		} else {
@@ -451,16 +456,16 @@ func wrap(err error, msg string) Error {
 		}
 	default:
 		return &root{
-			msg:     msg,
+			message: message,
 			wrapped: e,
 			stack:   stack,
 		}
 	}
 
 	return &wrapped{
-		msg:   msg,
-		err:   err,
-		frame: frame,
+		message: message,
+		err:     err,
+		frame:   frame,
 	}
 }
 
