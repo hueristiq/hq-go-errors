@@ -1,9 +1,8 @@
 package main
 
 import (
-	"fmt"
-
 	hqgoerrors "github.com/hueristiq/hq-go-errors"
+	hqgologger "github.com/hueristiq/hq-go-logger"
 )
 
 func main() {
@@ -12,5 +11,5 @@ func main() {
 
 	formattedStr := hqgoerrors.ToString(err, true)
 
-	fmt.Println(formattedStr)
+	hqgologger.Fatal().Label("").Msg(formattedStr)
 }
