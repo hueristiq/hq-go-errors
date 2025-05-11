@@ -11,5 +11,5 @@ func main() {
 
 	formattedStr := hqgoerrors.ToString(err, true)
 
-	hqgologger.Fatal().Label("").Msg(formattedStr)
+	hqgologger.Error().Label("").Msg(formattedStr)
 }

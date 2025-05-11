@@ -15,5 +15,5 @@ func main() {
 
 	bytes, _ := json.Marshal(formattedJSON)
 
-	hqgologger.Fatal().Label("").Msg(string(bytes))
+	hqgologger.Error().Label("").Msg(string(bytes))
 }

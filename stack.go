@@ -23,7 +23,7 @@ type stack []uintptr
 //  3. Constructs StackFrame objects with relevant debug information
 //
 // Returns:
-//   - []StackFrame: the detailed, ordered frames representing the captured backtrace,
+//   - ([]StackFrame): the detailed, ordered frames representing the captured backtrace,
 //     with the most recent call first in the slice.
 func (s *stack) get() []StackFrame {
 	pcs := *s
@@ -60,7 +60,7 @@ func (s *stack) get() []StackFrame {
 // looking for runtime initialization markers.
 //
 // Returns:
-//   - bool: true if the stack originates from a global init function, false otherwise
+//   - (bool): true if the stack originates from a global init function, false otherwise
 func (s *stack) isGlobal() bool {
 	frames := s.get()
 
@@ -85,7 +85,7 @@ func (s *stack) isGlobal() bool {
 //     and inserts the first PC before it if found
 //
 // Parameters:
-//   - wrapPCs stack: program counters to be merged into the current stack.
+//   - wrapPCs (stack): program counters to be merged into the current stack.
 func (s *stack) insertPC(wrapPCs stack) {
 	if len(wrapPCs) < 1 {
 		return
@@ -120,12 +120,12 @@ type Stack []StackFrame
 // and the order of presentation (natural or reversed).
 //
 // Parameters:
-//   - separator string: delimiter between frame elements (e.g., " " or "\t")
-//   - invert bool: order flag: true for reverse (most recent call last),
+//   - separator (string): delimiter between frame elements (e.g., " " or "\t")
+//   - invert (bool): order flag: true for reverse (most recent call last),
 //     false for natural (most recent call first)
 //
 // Returns:
-//   - []string: formatted lines representing each call frame, ordered according
+//   - ([]string): formatted lines representing each call frame, ordered according
 //     to the invert parameter
 func (s Stack) format(separator string, invert bool) []string {
 	n := len(s)
@@ -155,7 +155,7 @@ type frame uintptr
 // next instruction after the call.
 //
 // Returns:
-//   - uintptr: adjusted PC for retrieving function details from the runtime
+//   - (uintptr): adjusted PC for retrieving function details from the runtime
 func (f frame) pc() uintptr {
 	return uintptr(f) - 1
 }
@@ -165,7 +165,7 @@ func (f frame) pc() uintptr {
 // stack.get() for consistency.
 //
 // Returns:
-//   - StackFrame: enriched metadata for this call site containing:
+//   - (StackFrame): enriched metadata for this call site containing:
 func (f frame) get() StackFrame {
 	pc := f.pc()
 
@@ -189,9 +189,9 @@ func (f frame) get() StackFrame {
 // source of a function call in the codebase.
 //
 // Fields:
-//   - Name string: simplified function name (without package path) for concise display
-//   - File string: full path of the source file where the call originated
-//   - Line int: exact line number in the source file where the call occurred
+//   - Name (string): simplified function name (without package path) for concise display
+//   - File (string): full path of the source file where the call originated
+//   - Line (int): exact line number in the source file where the call occurred
 type StackFrame struct {
 	Name string
 	File string
@@ -203,7 +203,7 @@ type StackFrame struct {
 // The format is consistent and parsable: "Name<sep>File<sep>Line".
 //
 // Returns:
-//   - string: formatted frame information as a single string
+//   - (string): formatted frame information as a single string
 func (f *StackFrame) format(separator string) string {
 	return fmt.Sprintf("%s%s%s%s%d", f.Name, separator, f.File, separator, f.Line)
 }
@@ -213,10 +213,10 @@ func (f *StackFrame) format(separator string) string {
 // The skip parameter allows control over how many stack frames to ascend.
 //
 // Parameters:
-//   - skip int: number of additional application frames to skip (0 = direct caller)
+//   - skip (int): number of additional application frames to skip (0 = direct caller)
 //
 // Returns:
-//   - *frame: pointer to the resolved frame metadata, or nil if no frames available
+//   - (*frame): pointer to the resolved frame metadata, or nil if no frames available
 func caller(skip int) *frame {
 	// Maximum depth of stack to capture
 	const callersDepth = 32
@@ -241,10 +241,10 @@ func caller(skip int) *frame {
 // parameter allows the caller to omit wrapper functions from the trace.
 //
 // Parameters:
-//   - skip int: number of initial frames to omit (e.g., error wrapper functions)
+//   - skip (int): number of initial frames to omit (e.g., error wrapper functions)
 //
 // Returns:
-//   - *stack: stack of filtered program counters ready for resolution,
+//   - (*stack): stack of filtered program counters ready for resolution,
 //     or empty stack if no frames available
 func callers(skip int) *stack {
 	// Maximum depth of stack to capture
