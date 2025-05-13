@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 
 	hqgoerrors "github.com/hueristiq/hq-go-errors"
-	hqgologger "github.com/hueristiq/hq-go-logger"
 )
 
 func main() {
@@ -17,5 +17,5 @@ func main() {
 
 	bytes, _ := json.Marshal(formattedJSON)
 
-	hqgologger.Error().Label("").Msg(string(bytes))
+	fmt.Println(string(bytes))
 }
