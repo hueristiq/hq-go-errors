@@ -116,29 +116,48 @@ err := hqgoerrors.New("payment declined",
 package main
 
 import (
-	"fmt"
-
 	hqgoerrors "github.com/hueristiq/hq-go-errors"
+	hqgologger "github.com/hueristiq/hq-go-logger"
 )
 
 func main() {
-	err := hqgoerrors.New("root error example!", hqgoerrors.WithType("EXAMPLE_TYPE"), hqgoerrors.WithField("FIELD_KEY", "FIELD_VALUE"))
-	err = hqgoerrors.Wrap(err, "wrapped error example!")
+	err := hqgoerrors.New("root error example!", hqgoerrors.WithType("ERROR_TYPE"), hqgoerrors.WithField("FIELD_KEY_1", "FIELD_VALUE_1"), hqgoerrors.WithField("FIELD_KEY_2", "FIELD_VALUE_2"))
+
+	err = hqgoerrors.Wrap(err, "wrap error example 1!")
+	err = hqgoerrors.Wrap(err, "wrap error example 2!", hqgoerrors.WithType("ERROR_TYPE_2"), hqgoerrors.WithField("FIELD_KEY_1", "FIELD_VALUE_1"), hqgoerrors.WithField("FIELD_KEY_2", "FIELD_VALUE_2"))
 
 	formattedStr := hqgoerrors.ToString(err, true)
 
-	fmt.Println(formattedStr)
+	hqgologger.Error().Label("").Msg(formattedStr)
 }
+
 ```
 
 output:
 
 ```
-wrapped error example!
-        runtime.main:/usr/local/go/src/runtime/proc.go:283
-root error example!
-        runtime.main:/usr/local/go/src/runtime/proc.go:283
-        runtime.main:/usr/local/go/src/runtime/proc.go:283
+[ERROR_TYPE_2] wrap error example 2!
+
+Fields:
+  FIELD_KEY_1=FIELD_VALUE_1,  FIELD_KEY_2=FIELD_VALUE_2
+
+Stack:
+  runtime.main:/usr/local/go/src/runtime/proc.go:283
+
+wrap error example 1!
+
+Stack:
+  runtime.main:/usr/local/go/src/runtime/proc.go:283
+
+[ERROR_TYPE] root error example!
+
+Fields:
+  FIELD_KEY_1=FIELD_VALUE_1,  FIELD_KEY_2=FIELD_VALUE_2
+
+Stack:
+  runtime.main:/usr/local/go/src/runtime/proc.go:283
+  runtime.main:/usr/local/go/src/runtime/proc.go:283
+  runtime.main:/usr/local/go/src/runtime/proc.go:283
 ```
 
 #### ... to JSON
@@ -148,20 +167,22 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 
 	hqgoerrors "github.com/hueristiq/hq-go-errors"
+	hqgologger "github.com/hueristiq/hq-go-logger"
 )
 
 func main() {
-	err := hqgoerrors.New("root error example!", hqgoerrors.WithType("EXAMPLE_TYPE"), hqgoerrors.WithField("FIELD_KEY", "FIELD_VALUE"))
-	err = hqgoerrors.Wrap(err, "wrapped error example!")
+	err := hqgoerrors.New("root error example!", hqgoerrors.WithType("ERROR_TYPE"), hqgoerrors.WithField("FIELD_KEY_1", "FIELD_VALUE_1"), hqgoerrors.WithField("FIELD_KEY_2", "FIELD_VALUE_2"))
+
+	err = hqgoerrors.Wrap(err, "wrap error example 1!")
+	err = hqgoerrors.Wrap(err, "wrap error example 2!", hqgoerrors.WithType("ERROR_TYPE_2"), hqgoerrors.WithField("FIELD_KEY_1", "FIELD_VALUE_1"), hqgoerrors.WithField("FIELD_KEY_2", "FIELD_VALUE_2"))
 
 	formattedJSON := hqgoerrors.ToJSON(err, true)
 
 	bytes, _ := json.Marshal(formattedJSON)
 
-	fmt.Println(string(bytes))
+	hqgologger.Error().Label("").Msg(string(bytes))
 }
 ```
 
@@ -170,15 +191,30 @@ output:
 ```json
 {
   "root": {
+    "fields": {
+      "FIELD_KEY_1": "FIELD_VALUE_1",
+      "FIELD_KEY_2": "FIELD_VALUE_2"
+    },
     "message": "root error example!",
     "stack": [
       "runtime.main:/usr/local/go/src/runtime/proc.go:283",
+      "runtime.main:/usr/local/go/src/runtime/proc.go:283",
       "runtime.main:/usr/local/go/src/runtime/proc.go:283"
-    ]
+    ],
+    "type": "ERROR_TYPE"
   },
   "wrap": [
     {
-      "message": "wrapped error example!",
+      "fields": {
+        "FIELD_KEY_1": "FIELD_VALUE_1",
+        "FIELD_KEY_2": "FIELD_VALUE_2"
+      },
+      "message": "wrap error example 2!",
+      "stack": "runtime.main:/usr/local/go/src/runtime/proc.go:283",
+      "type": "ERROR_TYPE_2"
+    },
+    {
+      "message": "wrap error example 1!",
       "stack": "runtime.main:/usr/local/go/src/runtime/proc.go:283"
     }
   ]
