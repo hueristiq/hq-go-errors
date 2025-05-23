@@ -30,7 +30,7 @@ type rootError struct {
 //   - t (ErrorType): the ErrorType to assign to this error
 //
 // Returns:
-//   - err (Error): the modified error (for method chaining)
+//   - err (Error): the modified error (supports method chaining)
 func (e *rootError) WithType(t ErrorType) (err Error) {
 	e.t = t
 
@@ -57,7 +57,7 @@ func (e rootError) Type() (t ErrorType) {
 //   - value (interface{}): field value (any serializable type)
 //
 // Returns:
-//   - err (Error): the modified error (for method chaining)
+//   - err (Error): the modified error (supports method chaining)
 func (e *rootError) WithField(key string, value interface{}) (err Error) {
 	if e.fields == nil {
 		e.fields = make(map[string]interface{})
@@ -213,7 +213,7 @@ type wrapError struct {
 //   - t (ErrorType): the ErrorType to assign to this error
 //
 // Returns:
-//   - err (Error): the modified error (for method chaining)
+//   - err (Error): the modified error (supports method chaining)
 func (e *wrapError) WithType(t ErrorType) (err Error) {
 	e.t = t
 
@@ -240,7 +240,7 @@ func (e wrapError) Type() (t ErrorType) {
 //   - value (interface{}): field value (any serializable type)
 //
 // Returns:
-//   - (Error): the modified error (for method chaining)
+//   - err (Error): the modified error (supports method chaining)
 func (e *wrapError) WithField(key string, value interface{}) (err Error) {
 	if e.fields == nil {
 		e.fields = make(map[string]interface{})
@@ -354,7 +354,7 @@ func (e *wrapError) As(target interface{}) (as bool) {
 // Implements the standard library's error unwrapping interface.
 //
 // Returns:
-//   - (error): the wrapped error (may be nil)
+//   - err (error): the wrapped error (may be nil)
 func (e wrapError) Unwrap() (err error) {
 	err = e.err
 
@@ -372,6 +372,12 @@ func (e *wrapError) StackFrames() (PCs []uintptr) {
 	return
 }
 
+// Error is the interface that groups all error capabilities in this package.
+// It extends the standard error interface with additional functionality:
+//   - Type classification
+//   - Structured fields
+//   - Stack traces
+//   - Standard error wrapping
 type Error interface {
 	error
 	WithType(ErrorType) Error
@@ -407,7 +413,7 @@ var (
 // Returns:
 //   - err (error): the newly created error (implements Error interface)
 func New(message string, options ...ErrorOption) (err error) {
-	stack := callers(3)
+	stack := callers(3) // callers(3) skips this method (New), callers, and runtime.Callers
 
 	e := &rootError{
 		global:  stack.isGlobal(),
@@ -444,7 +450,7 @@ func WithType(t ErrorType) (option ErrorOption) {
 //   - v (interface{}): field value
 //
 // Returns:
-//   - option ErrorOption: configuration function for New/Wrap
+//   - option (ErrorOption): configuration function for New/Wrap
 func WithField(k string, v interface{}) (option ErrorOption) {
 	return func(e Error) {
 		e.WithField(k, v)
@@ -473,18 +479,29 @@ func Wrap(err error, message string, options ...ErrorOption) (errr error) {
 	return
 }
 
-// wrap is the internal implementation of error wrapping logic.
-// Handles three cases:
-//  1. Wrapping a root error (preserves full stack)
-//  2. Wrapping a wrapped error (finds root to preserve stack)
-//  3. Wrapping a non-package error (creates new root)
+// wrap is the internal implementation of error wrapping logic that handles three distinct cases:
+//
+// 1. Wrapping a rootError (preserves full stack trace while adding new context)
+// 2. Wrapping a wrapError (finds root error to preserve complete trace)
+// 3. Wrapping a non-package error (creates new root error with full stack)
+//
+// Parameters:
+//
+//   - err (error): The error being wrapped. Must be non-nil for the function to have effect.
+//     If nil is passed, the function returns nil.
+//   - message (string): Additional contextual information describing the wrapping site.
+//     This message will become part of the error chain and appear in the Error() output.
+//     Should be descriptive enough to identify where/why the wrap occurred.
+//
+// Returns:
+//   - errr (Error): The newly created wrapping error that implements the Error interface.
 func wrap(err error, message string) (errr Error) {
 	if err == nil {
 		return nil
 	}
 
-	stack := callers(4)
-	frame := caller(3)
+	stack := callers(4) // callers(4) skips runtime.Callers, callers, this method (wrap), and Wrap
+	frame := caller(3)  // caller(3) skips caller, this method (wrap), and Wrap
 
 	switch e := err.(type) {
 	case *rootError:
