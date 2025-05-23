@@ -6,108 +6,31 @@ import (
 	"strings"
 )
 
-// stack represents a slice of PCs (program counters) recorded from the call stack.
-// Internally, it captures raw PCs so that error-handling code can later resolve
-// and format a complete backtrace, making it easier to pinpoint failure points.
-type stack []uintptr
-
-// resolveToStackFrames resolves the recorded PCs into a slice of detailed StackFrame objects.
-// It iterates over each frame in the call stack, extracts the function name (trimming
-// any import path for brevity), source file path, and line number. This enables
-// presentation of a clear, ordered trace of calls leading up to an error.
+// StackFrame holds metadata for a single call site within a backtrace.
+// It contains all the information needed to identify and locate the
+// source of a function call in the codebase.
 //
-// The resolution process:
-//  1. Converts raw PCs to runtime.Frame objects using runtime.CallersFrames
-//  2. Extracts and simplifies function names by removing package paths
-//  3. Constructs StackFrame objects with relevant debug information
-//
-// Returns:
-//   - stackFrameObjects ([]StackFrame): the detailed, ordered frames representing the captured backtrace,
-//     with the most recent call first in the slice.
-func (s *stack) resolveToStackFrames() (stackFrameObjects []StackFrame) {
-	PCs := *s
-
-	runtimeFramesObjects := runtime.CallersFrames(PCs)
-
-	stackFrameObjects = make([]StackFrame, 0, len(PCs))
-
-	for {
-		runtimeFrame, more := runtimeFramesObjects.Next()
-
-		name := runtimeFrame.Function
-
-		if idx := strings.LastIndex(name, "/"); idx >= 0 {
-			name = name[idx+1:]
-		}
-
-		stackFrameObjects = append(stackFrameObjects, StackFrame{
-			Name: name,
-			File: runtimeFrame.File,
-			Line: runtimeFrame.Line,
-		})
-
-		if !more {
-			break
-		}
-	}
-
-	return
+// Fields:
+//   - Name (string): simplified function name (without package path) for concise display
+//   - File (string): full path of the source file where the call originated
+//   - Line (int): exact line number in the source file where the call occurred
+type StackFrame struct {
+	Name string
+	File string
+	Line int
 }
 
-// insertPC integrates additional PCs into the existing stack trace.
-// It supports two scenarios:
-//   - Single-PC insertion: appends a marker (e.g., an error-wrap point)
-//   - Dual-PC insertion: locates the context frame then injects the wrapper frame
-//     immediately before it, preserving logical call ordering
-//
-// The insertion logic:
-//  1. For single PC, simply appends to the end of the stack
-//  2. For dual PCs, searches for the second PC in the existing stack
-//     and inserts the first PC before it if found
+// format outputs a single-line representation of the StackFrame using the
+// provided separator, ideal for log lines or multi-line error dumps.
+// The format is consistent and parsable: "Name<sep>File<sep>Line".
 //
 // Parameters:
-//   - wrapPCs (stack): program counters to be merged into the current stack.
-func (s *stack) insertPC(wrapPCs stack) {
-	if len(wrapPCs) < 1 {
-		return
-	}
-
-	if len(wrapPCs) == 1 {
-		*s = append(*s, wrapPCs[0])
-
-		return
-	}
-
-	for i, pc := range *s {
-		if pc == wrapPCs[0] {
-			return
-		}
-
-		if pc == wrapPCs[1] {
-			*s = append((*s)[:i], append(stack{wrapPCs[0]}, (*s)[i:]...)...)
-
-			return
-		}
-	}
-}
-
-// isGlobal checks if the captured call stack includes a global init invocation.
-// This is useful to detect whether an error occurred during package initialization
-// rather than at runtime business logic. It examines each frame's function name
-// looking for runtime initialization markers.
+//   - separator (string): delimiter to use between frame components
 //
 // Returns:
-//   - isGlobal (bool): true if the stack originates from a global init function, false otherwise
-func (s *stack) isGlobal() (isGlobal bool) {
-	frames := s.resolveToStackFrames()
-
-	for _, f := range frames {
-		if strings.EqualFold(f.Name, "runtime.doinit") {
-			isGlobal = true
-
-			return
-		}
-	}
+//   - line (string): formatted frame information as a single string
+func (f *StackFrame) format(separator string) (line string) {
+	line = fmt.Sprintf("%s%s%s%s%d", f.Name, separator, f.File, separator, f.Line)
 
 	return
 }
@@ -115,6 +38,9 @@ func (s *stack) isGlobal() (isGlobal bool) {
 // Stack represents a high-level, resolved backtrace composed of StackFrame entries.
 // It enables formatting and presentation of the full call sequence in a human-readable
 // format. The Stack type provides methods for formatting the trace in various ways.
+//
+// The stack is ordered with the most recent call first (index 0) by default,
+// but can be formatted in reverse order when needed.
 type Stack []StackFrame
 
 // format serializes the Stack into human-readable strings suitable for logging
@@ -191,28 +117,113 @@ func (f frame) resolveToStackFrame() (stackFrame StackFrame) {
 	return
 }
 
-// StackFrame holds metadata for a single call site within a backtrace.
-// It contains all the information needed to identify and locate the
-// source of a function call in the codebase.
+// stack represents a slice of PCs (program counters) recorded from the call stack.
+// Internally, it captures raw PCs so that error-handling code can later resolve
+// and format a complete backtrace, making it easier to pinpoint failure points.
 //
-// Fields:
-//   - Name (string): simplified function name (without package path) for concise display
-//   - File (string): full path of the source file where the call originated
-//   - Line (int): exact line number in the source file where the call occurred
-type StackFrame struct {
-	Name string
-	File string
-	Line int
-}
+// The stack type provides methods for:
+//   - Resolving PCs to human-readable frames
+//   - Detecting initialization-time errors
+//   - Inserting additional program counters for error wrapping
+type stack []uintptr
 
-// format outputs a single-line representation of the StackFrame using the
-// provided separator, ideal for log lines or multi-line error dumps.
-// The format is consistent and parsable: "Name<sep>File<sep>Line".
+// resolveToStackFrames resolves the recorded PCs into a slice of detailed StackFrame objects.
+// It iterates over each frame in the call stack, extracts the function name (trimming
+// any import path for brevity), source file path, and line number. This enables
+// presentation of a clear, ordered trace of calls leading up to an error.
+//
+// The resolution process:
+//  1. Converts raw PCs to runtime.Frame objects using runtime.CallersFrames
+//  2. Extracts and simplifies function names by removing package paths
+//  3. Constructs StackFrame objects with relevant debug information
 //
 // Returns:
-//   - line (string): formatted frame information as a single string
-func (f *StackFrame) format(separator string) (line string) {
-	line = fmt.Sprintf("%s%s%s%s%d", f.Name, separator, f.File, separator, f.Line)
+//   - stackFrameObjects ([]StackFrame): the detailed, ordered frames representing the captured backtrace,
+//     with the most recent call first in the slice.
+func (s *stack) resolveToStackFrames() (stackFrameObjects []StackFrame) {
+	PCs := *s
+
+	runtimeFramesObjects := runtime.CallersFrames(PCs)
+
+	stackFrameObjects = make([]StackFrame, 0, len(PCs))
+
+	for {
+		runtimeFrame, more := runtimeFramesObjects.Next()
+
+		name := runtimeFrame.Function
+
+		if idx := strings.LastIndex(name, "/"); idx >= 0 {
+			name = name[idx+1:]
+		}
+
+		stackFrameObjects = append(stackFrameObjects, StackFrame{
+			Name: name,
+			File: runtimeFrame.File,
+			Line: runtimeFrame.Line,
+		})
+
+		if !more {
+			break
+		}
+	}
+
+	return
+}
+
+// insertPC integrates additional PCs into the existing stack trace.
+// It supports two scenarios:
+//   - Single-PC insertion: appends a marker (e.g., an error-wrap point)
+//   - Dual-PC insertion: locates the context frame then injects the wrapper frame
+//     immediately before it, preserving logical call ordering
+//
+// The insertion logic:
+//  1. For single PC, simply appends to the end of the stack
+//  2. For dual PCs, searches for the second PC in the existing stack
+//     and inserts the first PC before it if found
+//
+// Parameters:
+//   - wrapPCs (stack): program counters to be merged into the current stack.
+func (s *stack) insertPC(wrapPCs stack) {
+	if len(wrapPCs) < 1 {
+		return
+	}
+
+	if len(wrapPCs) == 1 {
+		*s = append(*s, wrapPCs[0])
+
+		return
+	}
+
+	for i, pc := range *s {
+		if pc == wrapPCs[0] {
+			break
+		}
+
+		if pc == wrapPCs[1] {
+			*s = append((*s)[:i], append(stack{wrapPCs[0]}, (*s)[i:]...)...)
+
+			break
+		}
+	}
+}
+
+// isGlobal checks if the captured call stack includes a global init invocation.
+// This is useful to detect whether an error occurred during package initialization
+// rather than at runtime business logic. It examines each frame's function name
+// looking for runtime initialization markers.
+//
+// Returns:
+//   - isGlobal (bool): true if the stack originates from a global init function, false otherwise
+func (s *stack) isGlobal() (isGlobal bool) {
+	frames := s.resolveToStackFrames()
+
+	for _, f := range frames {
+		if strings.EqualFold(f.Name, "runtime.doinit") {
+			isGlobal = true
+
+			return
+		}
+	}
 
 	return
 }
@@ -227,20 +238,9 @@ func (f *StackFrame) format(separator string) (line string) {
 // Returns:
 //   - (f *frame): pointer to the resolved frame metadata, or nil if no frames available
 func caller(skip int) (f *frame) {
-	// Maximum depth of stack to capture
-	const callersDepth = 32
+	pc, _, _, _ := runtime.Caller(skip)
 
-	var pcs [callersDepth]uintptr
-
-	// +2 skips:
-	//   1. this function (caller)
-	//   2. the Callers function itself
-	n := runtime.Callers(skip+2, pcs[:])
-	if n == 0 {
-		return nil
-	}
-
-	v := frame(pcs[0])
+	v := frame(pc)
 
 	f = &v
 
@@ -258,27 +258,23 @@ func caller(skip int) (f *frame) {
 //   - s (*stack): stack of filtered program counters ready for resolution,
 //     or empty stack if no frames available
 func callers(skip int) (s *stack) {
-	// Maximum depth of stack to capture
 	const depth = 64
 
 	var PCs [depth]uintptr
 
-	// +1 skips the callers function itself
-	n := runtime.Callers(skip+1, PCs[:])
-	if n == 0 {
-		s = &stack{}
+	c := runtime.Callers(skip, PCs[:])
 
-		return
-	}
+	valid := PCs[:c]
 
-	valid := PCs[:n]
+	v := make(stack, 0, c)
 
-	v := make(stack, 0, n)
-
-	// Filter out runtime-related frames
 	for _, PC := range valid {
-		fn := runtime.FuncForPC(PC)
-		if fn == nil || strings.HasPrefix(fn.Name(), "runtime.") {
+		fn := runtime.FuncForPC(PC - 1)
+		if fn == nil {
+			continue
+		}
+
+		if strings.HasPrefix(fn.Name(), "runtime.") {
 			continue
 		}
 
