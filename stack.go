@@ -184,7 +184,7 @@ func (s *stack) resolveToStackFrames() (stackFrameObjects []StackFrame) {
 // Parameters:
 //   - wrapPCs (stack): program counters to be merged into the current stack.
 func (s *stack) insertPC(wrapPCs stack) {
-	if len(wrapPCs) < 1 {
+	if len(wrapPCs) == 0 {
 		return
 	}
 
@@ -200,11 +200,15 @@ func (s *stack) insertPC(wrapPCs stack) {
 		}
 
 		if pc == wrapPCs[1] {
-			*s = append((*s)[:i], append(stack{wrapPCs[0]}, (*s)[i:]...)...)
+			*s = insert(*s, wrapPCs[0], i)
 
 			break
 		}
 	}
+}
+
+func insert(s stack, u uintptr, i int) stack {
+	return append(s[:i], append([]uintptr{u}, s[i:]...)...)
 }
 
 // isGlobal checks if the captured call stack includes a global init invocation.
