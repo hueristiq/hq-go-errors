@@ -142,12 +142,12 @@ Fields:
   FIELD_KEY_1=FIELD_VALUE_1,  FIELD_KEY_2=FIELD_VALUE_2
 
 Stack:
-  runtime.main:/usr/local/go/src/runtime/proc.go:283
+  main.main:/home/.../hq-go-errors/examples/string_format/main.go:13
 
 wrap error example 1!
 
 Stack:
-  runtime.main:/usr/local/go/src/runtime/proc.go:283
+  main.main:/home/.../hq-go-errors/examples/string_format/main.go:12
 
 [ERROR_TYPE] root error example!
 
@@ -155,9 +155,9 @@ Fields:
   FIELD_KEY_1=FIELD_VALUE_1,  FIELD_KEY_2=FIELD_VALUE_2
 
 Stack:
-  runtime.main:/usr/local/go/src/runtime/proc.go:283
-  runtime.main:/usr/local/go/src/runtime/proc.go:283
-  runtime.main:/usr/local/go/src/runtime/proc.go:283
+  main.main:/home/.../hq-go-errors/examples/string_format/main.go:13
+  main.main:/home/.../hq-go-errors/examples/string_format/main.go:12
+  main.main:/home/.../hq-go-errors/examples/string_format/main.go:10
 ```
 
 #### ... to JSON
@@ -197,9 +197,9 @@ output:
     },
     "message": "root error example!",
     "stack": [
-      "runtime.main:/usr/local/go/src/runtime/proc.go:283",
-      "runtime.main:/usr/local/go/src/runtime/proc.go:283",
-      "runtime.main:/usr/local/go/src/runtime/proc.go:283"
+      "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:14",
+      "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:13",
+      "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:11"
     ],
     "type": "ERROR_TYPE"
   },
@@ -210,12 +210,12 @@ output:
         "FIELD_KEY_2": "FIELD_VALUE_2"
       },
       "message": "wrap error example 2!",
-      "stack": "runtime.main:/usr/local/go/src/runtime/proc.go:283",
+      "stack": "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:14",
       "type": "ERROR_TYPE_2"
     },
     {
       "message": "wrap error example 1!",
-      "stack": "runtime.main:/usr/local/go/src/runtime/proc.go:283"
+      "stack": "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:13"
     }
   ]
 }
