@@ -20,40 +20,69 @@
 
 ## Features
 
-- **Full stack traces:** Capture call stacks at the point of creation and wrap points.
-- **Error chaining:** Wrap existing errors with new context while preserving traces.
-- **Error classification:** Tag errors with custom `ErrorType` values for programmatic handling.
-- **Structured fields:** Attach arbitrary key/value metadata to any error.
-- **Custom formatting:** Render errors (and traces) as strings or JSON, with inversion and filtering options.
-- **Standards-compliant:** Implements Go’s `error`, `Unwrap`, `Is`, and `As` interfaces plus extended helpers.
+- **Full Stack Traces:** Capture detailed call stacks at error creation and wrap points, with customizable formatting (e.g., reverse order, separators).
+- **Error Chaining:** Wrap errors to add context while preserving the original stack trace and error details.
+- **Error Classification:** Assign `ErrorType` values to categorize errors for programmatic handling.
+- **Structured Fields:** Attach arbitrary key-value metadata (e.g., request IDs, parameters) to errors for enhanced debugging.
+- **Flexible Formatting:** Render errors as human-readable strings or JSON-like maps, with options to include/exclude stack traces, invert chain order, or handle external errors.
+- **Standards-Compliant:** Implements Go’s standard `error`, `Unwrap`, `Is`, and `As` interfaces, plus additional helpers like `Cause` for root cause analysis.
 
 ## Installation
 
-To install `hq-go-errors`, run:
+To install `hq-go-errors`, run the following command in your Go project:
 
 ```bash
 go get -v -u github.com/hueristiq/hq-go-errors
 ```
 
-Make sure your Go environment is set up properly (Go 1.x or later is recommended).
+Make sure your Go environment is set up properly (Go 1.13 or later is recommended).
 
 ## Usage
 
 ### Creating Errors
 
-Creates a root error capturing the full call stack at the point of invocation.
+Use `hqgoerrors.New` to create a root error with a full call stack captured at the point of invocation.
 
 ```go
-err := hqgoerrors.New("unable to load config")
+package main
+
+import (
+	"fmt"
+
+	hqgoerrors "github.com/hueristiq/hq-go-errors"
+)
+
+func main() {
+	err := hqgoerrors.New("failed to initialize database")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
 ```
 
 ### Wrapping Errors
 
-Wraps an existing error (including non-package errors), capturing the single frame where the wrap occurred, and preserving or extending the original stack trace.
+Use `hqgoerrors.Wrap` to add context to an existing error, capturing a single stack frame at the wrap point while preserving the original error’s stack trace.
 
 ```go
-if err := load(); err != nil {
-	return hqgoerrors.Wrap(err, "load() failed")
+package main
+
+import (
+	"fmt"
+
+	hqgoerrors "github.com/hueristiq/hq-go-errors"
+)
+
+func loadConfig() error {
+	return hqgoerrors.New("cannot read config file")
+}
+
+func main() {
+	if err := loadConfig(); err != nil {
+		err = hqgoerrors.Wrap(err, "failed to load configuration")
+
+		fmt.Println(err.Error())
+	}
 }
 ```
 
