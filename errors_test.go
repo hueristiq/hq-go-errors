@@ -158,10 +158,15 @@ func TestHelpers(t *testing.T) {
 	t.Run("is", func(t *testing.T) {
 		t.Parallel()
 
-		err := New("error", WithType("TYPE"))
+		err0 := errors.New("error")
 
-		assert.True(t, Is(err, err))
-		assert.True(t, Is(Wrap(err, "wrapper"), err))
+		assert.True(t, Is(err0, err0))
+		assert.True(t, Is(Wrap(err0, "wrapper"), err0))
+
+		err1 := New("error", WithType("TYPE"))
+
+		assert.True(t, Is(err1, err1))
+		assert.True(t, Is(Wrap(err1, "wrapper"), err1))
 	})
 
 	t.Run("as", func(t *testing.T) {

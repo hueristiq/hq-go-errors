@@ -23,60 +23,12 @@ type rootError struct {
 	stack   *stack
 }
 
-// WithType associates a type with the error for classification purposes.
-// This enables error handling based on error categories/types.
-//
-// Parameters:
-//   - t (ErrorType): the ErrorType to assign to this error
-//
-// Returns:
-//   - err (Error): the modified error (supports method chaining)
-func (e *rootError) WithType(t ErrorType) (err Error) {
-	e.t = t
-
-	err = e
-
-	return
-}
-
 // Type returns the error's classification type if one was set.
 //
 // Returns:
 //   - t (ErrorType): the error's type, or empty string if untyped
 func (e rootError) Type() (t ErrorType) {
 	t = e.t
-
-	return
-}
-
-// WithField adds a key-value pair to the error's structured context.
-// Fields provide additional machine-readable information about the error.
-//
-// Parameters:
-//   - key (string): field name (should be descriptive and consistent)
-//   - value (interface{}): field value (any serializable type)
-//
-// Returns:
-//   - err (Error): the modified error (supports method chaining)
-func (e *rootError) WithField(key string, value interface{}) (err Error) {
-	if e.fields == nil {
-		e.fields = make(map[string]interface{})
-	}
-
-	e.fields[key] = value
-
-	err = e
-
-	return
-}
-
-// Fields returns all structured fields attached to the error.
-// The returned map should not be modified directly.
-//
-// Returns:
-//   - fields (map[string]interface{}): all attached fields (may be nil)
-func (e *rootError) Fields() (fields map[string]interface{}) {
-	fields = e.fields
 
 	return
 }
@@ -98,6 +50,54 @@ func (e *rootError) Error() (s string) {
 	if e.wrapped != nil {
 		s += ": " + e.wrapped.Error()
 	}
+
+	return
+}
+
+// Fields returns all structured fields attached to the error.
+// The returned map should not be modified directly.
+//
+// Returns:
+//   - fields (map[string]interface{}): all attached fields (may be nil)
+func (e *rootError) Fields() (fields map[string]interface{}) {
+	fields = e.fields
+
+	return
+}
+
+// WithType associates a type with the error for classification purposes.
+// This enables error handling based on error categories/types.
+//
+// Parameters:
+//   - t (ErrorType): the ErrorType to assign to this error
+//
+// Returns:
+//   - err (Error): the modified error (supports method chaining)
+func (e *rootError) WithType(t ErrorType) (err Error) {
+	e.t = t
+
+	err = e
+
+	return
+}
+
+// WithField adds a key-value pair to the error's structured context.
+// Fields provide additional machine-readable information about the error.
+//
+// Parameters:
+//   - key (string): field name (should be descriptive and consistent)
+//   - value (interface{}): field value (any serializable type)
+//
+// Returns:
+//   - err (Error): the modified error (supports method chaining)
+func (e *rootError) WithField(key string, value interface{}) (err Error) {
+	if e.fields == nil {
+		e.fields = make(map[string]interface{})
+	}
+
+	e.fields[key] = value
+
+	err = e
 
 	return
 }
@@ -126,8 +126,6 @@ func (e *rootError) Is(target error) (is bool) {
 
 		return
 	}
-
-	is = e.message == target.Error()
 
 	return
 }
@@ -206,60 +204,12 @@ type wrapError struct {
 	frame   *frame
 }
 
-// WithType associates a type with the error for classification purposes.
-// This enables error handling based on error categories/types.
-//
-// Parameters:
-//   - t (ErrorType): the ErrorType to assign to this error
-//
-// Returns:
-//   - err (Error): the modified error (supports method chaining)
-func (e *wrapError) WithType(t ErrorType) (err Error) {
-	e.t = t
-
-	err = e
-
-	return
-}
-
 // Type returns the error's classification type if one was set.
 //
 // Returns:
 //   - t (ErrorType): the error's type, or empty string if untyped
 func (e wrapError) Type() (t ErrorType) {
 	t = e.t
-
-	return
-}
-
-// WithField adds a key-value pair to the error's structured context.
-// Fields provide additional machine-readable information about the error.
-//
-// Parameters:
-//   - key (string): field name (should be descriptive and consistent)
-//   - value (interface{}): field value (any serializable type)
-//
-// Returns:
-//   - err (Error): the modified error (supports method chaining)
-func (e *wrapError) WithField(key string, value interface{}) (err Error) {
-	if e.fields == nil {
-		e.fields = make(map[string]interface{})
-	}
-
-	e.fields[key] = value
-
-	err = e
-
-	return
-}
-
-// Fields returns all structured fields attached to the error.
-// The returned map should not be modified directly.
-//
-// Returns:
-//   - fields (map[string]interface{}): all attached fields (may be nil)
-func (e *wrapError) Fields() (fields map[string]interface{}) {
-	fields = e.fields
 
 	return
 }
@@ -281,6 +231,54 @@ func (e *wrapError) Error() (s string) {
 	if e.err != nil {
 		s += ": " + e.err.Error()
 	}
+
+	return
+}
+
+// Fields returns all structured fields attached to the error.
+// The returned map should not be modified directly.
+//
+// Returns:
+//   - fields (map[string]interface{}): all attached fields (may be nil)
+func (e *wrapError) Fields() (fields map[string]interface{}) {
+	fields = e.fields
+
+	return
+}
+
+// WithType associates a type with the error for classification purposes.
+// This enables error handling based on error categories/types.
+//
+// Parameters:
+//   - t (ErrorType): the ErrorType to assign to this error
+//
+// Returns:
+//   - err (Error): the modified error (supports method chaining)
+func (e *wrapError) WithType(t ErrorType) (err Error) {
+	e.t = t
+
+	err = e
+
+	return
+}
+
+// WithField adds a key-value pair to the error's structured context.
+// Fields provide additional machine-readable information about the error.
+//
+// Parameters:
+//   - key (string): field name (should be descriptive and consistent)
+//   - value (interface{}): field value (any serializable type)
+//
+// Returns:
+//   - err (Error): the modified error (supports method chaining)
+func (e *wrapError) WithField(key string, value interface{}) (err Error) {
+	if e.fields == nil {
+		e.fields = make(map[string]interface{})
+	}
+
+	e.fields[key] = value
+
+	err = e
 
 	return
 }
@@ -309,8 +307,6 @@ func (e *wrapError) Is(target error) (is bool) {
 
 		return
 	}
-
-	is = e.message == target.Error()
 
 	return
 }
@@ -546,9 +542,7 @@ func wrap(err error, message string) (errr Error) {
 // Returns:
 //   - errr (error): The next error in the chain, or nil if none.
 func Unwrap(err error) (errr error) {
-	u, ok := err.(interface {
-		Unwrap() error
-	})
+	u, ok := err.(interface{ Unwrap() error })
 	if !ok {
 		return
 	}
@@ -585,14 +579,6 @@ func Is(err, target error) (is bool) {
 			is = true
 
 			return
-		}
-
-		if x, ok := err.(interface{ Is(error) bool }); ok {
-			if x.Is(target) {
-				is = true
-
-				return
-			}
 		}
 
 		if err = Unwrap(err); err == nil {
