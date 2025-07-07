@@ -540,14 +540,16 @@ func wrap(err error, message string) (errr Error) {
 //   - err (error): the error to unwrap.
 //
 // Returns:
-//   - errr (error): The next error in the chain, or nil if none.
-func Unwrap(err error) (errr error) {
+//   - result (error): The next error in the chain, or nil if none.
+func Unwrap(err error) (result error) {
 	u, ok := err.(interface{ Unwrap() error })
 	if !ok {
 		return
 	}
 
-	return u.Unwrap()
+	result = u.Unwrap()
+
+	return
 }
 
 // Is reports whether err or any error in its chain matches target.
@@ -558,30 +560,51 @@ func Unwrap(err error) (errr error) {
 //   - target (error): the error to compare against.
 //
 // Returns:
-//   - is (bool): true if any error in err's chain matches target.
-func Is(err, target error) (is bool) {
-	if target == nil {
-		is = err == target
+//   - result (bool): true if any error in err's chain matches target.
+func Is(err, target error) (result bool) {
+	if err == nil || target == nil {
+		result = err == target
 
 		return
 	}
 
 	isComparable := reflect.TypeOf(target).Comparable()
 
+	result = is(err, target, isComparable)
+
+	return
+}
+
+func is(err, target error, isComparable bool) (result bool) {
 	for {
 		if isComparable && err == target {
-			is = true
+			result = true
 
 			return
 		}
 
 		if x, ok := err.(interface{ Is(error) bool }); ok && x.Is(target) {
-			is = true
+			result = true
 
 			return
 		}
 
-		if err = Unwrap(err); err == nil {
+		switch x := err.(type) {
+		case interface{ Unwrap() error }:
+			if err = x.Unwrap(); err == nil {
+				return
+			}
+		case interface{ Unwrap() []error }:
+			for _, err := range x.Unwrap() {
+				if is(err, target, isComparable) {
+					result = true
+
+					return
+				}
+			}
+
+			return
+		default:
 			return
 		}
 	}
@@ -595,8 +618,8 @@ func Is(err, target error) (is bool) {
 //   - target (interface{}): pointer to the destination interface or concrete type.
 //
 // Returns:
-//   - as (bool): true if a matching error was found and target was set.
-func As(err error, target interface{}) (as bool) {
+//   - result (bool): true if a matching error was found and target was set.
+func As(err error, target interface{}) (result bool) {
 	if target == nil || err == nil {
 		return
 	}
@@ -614,26 +637,47 @@ func As(err error, target interface{}) (as bool) {
 		return
 	}
 
+	result = as(err, target, val, targetType)
+
+	return
+}
+
+func as(err error, target any, targetVal reflect.Value, targetType reflect.Type) (result bool) {
 	for {
-		// Try custom As method first
-		if x, ok := err.(interface{ As(interface{}) bool }); ok {
-			if x.As(target) {
-				as = true
-
-				return
-			}
-		}
-
-		// Standard type assignment check
 		if reflect.TypeOf(err).AssignableTo(targetType) {
-			val.Elem().Set(reflect.ValueOf(err))
+			targetVal.Elem().Set(reflect.ValueOf(err))
 
-			as = true
+			result = true
 
 			return
 		}
 
-		if err = Unwrap(err); err == nil {
+		if x, ok := err.(interface{ As(interface{}) bool }); ok && x.As(target) {
+			result = true
+
+			return
+		}
+
+		switch x := err.(type) {
+		case interface{ Unwrap() error }:
+			if err = x.Unwrap(); err == nil {
+				return
+			}
+		case interface{ Unwrap() []error }:
+			for _, err := range x.Unwrap() {
+				if err == nil {
+					continue
+				}
+
+				if as(err, target, targetVal, targetType) {
+					result = true
+
+					return
+				}
+			}
+
+			return
+		default:
 			return
 		}
 	}
@@ -646,12 +690,14 @@ func As(err error, target interface{}) (as bool) {
 //   - err (error): the error to inspect.
 //
 // Returns:
-//   - errr (error): The deepest non-wrapped error in the chain.
-func Cause(err error) (errr error) {
+//   - result (error): The deepest non-wrapped error in the chain.
+func Cause(err error) (result error) {
 	for {
 		uerr := Unwrap(err)
 		if uerr == nil {
-			return err
+			result = err
+
+			return
 		}
 
 		err = uerr

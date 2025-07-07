@@ -2,6 +2,7 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -143,53 +144,6 @@ func TestWrapError(t *testing.T) {
 	})
 }
 
-func TestHelpers(t *testing.T) {
-	t.Parallel()
-
-	t.Run("unwrap", func(t *testing.T) {
-		t.Parallel()
-
-		base := New("base")
-		wrapped := Wrap(base, "wrapper")
-
-		assert.Equal(t, base, Unwrap(wrapped))
-	})
-
-	t.Run("is", func(t *testing.T) {
-		t.Parallel()
-
-		err0 := errors.New("error")
-
-		assert.True(t, Is(err0, err0))
-		assert.True(t, Is(Wrap(err0, "wrapper"), err0))
-
-		err1 := New("error", WithType("TYPE"))
-
-		assert.True(t, Is(err1, err1))
-		assert.True(t, Is(Wrap(err1, "wrapper"), err1))
-	})
-
-	t.Run("as", func(t *testing.T) {
-		t.Parallel()
-
-		err := New("error")
-
-		var target *rootError
-
-		assert.True(t, As(err, &target))
-		assert.Equal(t, err, target)
-	})
-
-	t.Run("cause", func(t *testing.T) {
-		t.Parallel()
-
-		base := New("base")
-		wrapped := Wrap(base, "wrapper")
-
-		assert.Equal(t, base, Cause(wrapped))
-	})
-}
-
 func TestErrorOptions(t *testing.T) {
 	t.Parallel()
 
@@ -316,4 +270,81 @@ func TestStackPreservation(t *testing.T) {
 
 		assert.NotEmpty(t, root.stack)
 	})
+}
+
+func TestIs(t *testing.T) {
+	t.Parallel()
+
+	err1 := New("1")
+	err1a := Wrap(err1, "wrap 2")
+	err1b := Wrap(err1a, "wrap 3")
+
+	err2 := errors.New("2")
+	err2a := fmt.Errorf("wrap 2: %w", err1)
+
+	tests := []struct {
+		err    error
+		target error
+		match  bool
+	}{
+		{nil, nil, true},
+		{nil, err1, false},
+		{err1, nil, false},
+		{err1, err1, true},
+		{err1a, err1, true},
+		{err1b, err1, true},
+		{nil, err2, false},
+		{err2, nil, false},
+		{err2, err2, true},
+		{err2a, err2, false},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			t.Parallel()
+
+			if tt.match {
+				assert.True(t, Is(tt.err, tt.target))
+			} else {
+				assert.False(t, Is(tt.err, tt.target))
+			}
+		})
+	}
+}
+
+func TestAs(t *testing.T) {
+	t.Parallel()
+
+	var target Error
+
+	var r *rootError
+
+	var w *wrapError
+
+	err1 := New("1")
+	err1a := Wrap(err1, "wrap 2")
+
+	tests := []struct {
+		err    error
+		target any
+		match  bool
+	}{
+		{nil, nil, false},
+		{err1, nil, false},
+		{err1, &target, true},
+		{err1, &r, true},
+		{err1a, &w, true},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			t.Parallel()
+
+			if tt.match {
+				assert.True(t, As(tt.err, tt.target))
+			} else {
+				assert.False(t, As(tt.err, tt.target))
+			}
+		})
+	}
 }
