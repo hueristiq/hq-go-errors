@@ -25,14 +25,14 @@ type UnpackedError struct {
 //
 // Fields:
 //   - Message (string): Primary human-readable error message.
-//   - Type (ErrorType): Optional error classification for programmatic handling.
+//   - Type (Type): Optional error classification for programmatic handling.
 //   - Fields (map[string]interface{}): Structured key-value pairs providing
 //     additional context about the error (e.g., input parameters, state values).
 //   - Stack (Stack): Complete call stack captured at error creation time.
 //     Each frame contains method, file, and line information.
 type ErrRoot struct {
 	Message string
-	Type    ErrorType
+	Type    Type
 	Fields  map[string]interface{}
 	Stack   Stack
 }
@@ -118,12 +118,12 @@ func (err *ErrRoot) formatJSON(format *JSONFormat) (formatted map[string]interfa
 //
 // Fields:
 //   - Message (string): Contextual message added during wrapping.
-//   - Type (ErrorType): Optional classification for this wrap level.
+//   - Type (Type): Optional classification for this wrap level.
 //   - Fields (map[string]interface{}): Additional context specific to this wrap.
 //   - Frame (StackFrame): Single stack frame capturing where the wrap occurred.
 type ErrLink struct {
 	Message string
-	Type    ErrorType
+	Type    Type
 	Fields  map[string]interface{}
 	Frame   StackFrame
 }
