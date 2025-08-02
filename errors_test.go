@@ -30,7 +30,7 @@ func TestRootError(t *testing.T) {
 
 		require.Error(t, err)
 
-		assert.Equal(t, ErrorType("TEST_TYPE"), err.(*rootError).t)
+		assert.Equal(t, Type("TEST_TYPE"), err.(*rootError).t)
 	})
 
 	t.Run("with field", func(t *testing.T) {
@@ -153,7 +153,7 @@ func TestErrorOptions(t *testing.T) {
 		opt := WithType("TEST")
 		err := New("error", opt)
 
-		assert.Equal(t, ErrorType("TEST"), err.(*rootError).t)
+		assert.Equal(t, Type("TEST"), err.(*rootError).t)
 	})
 
 	t.Run("with field", func(t *testing.T) {
@@ -174,7 +174,7 @@ func TestErrorOptions(t *testing.T) {
 			WithField("key2", "value2"),
 		)
 
-		assert.Equal(t, ErrorType("TYPE"), err.(*rootError).t)
+		assert.Equal(t, Type("TYPE"), err.(*rootError).t)
 		assert.Equal(t, map[string]interface{}{
 			"key1": "value1",
 			"key2": "value2",
