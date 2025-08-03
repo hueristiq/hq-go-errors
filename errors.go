@@ -150,7 +150,7 @@ func (e *rootError) StackFrames() (PCs []uintptr) {
 	return
 }
 
-// WithType associates a type with the error for classification purposes.
+// SetType associates a type with the error for classification purposes.
 // This enables error handling based on error categories/types.
 //
 // Parameters:
@@ -158,7 +158,7 @@ func (e *rootError) StackFrames() (PCs []uintptr) {
 //
 // Returns:
 //   - err (Error): the modified error (supports method chaining)
-func (e *rootError) WithType(t Type) (err Error) {
+func (e *rootError) SetType(t Type) (err Error) {
 	e.t = t
 
 	err = e
@@ -166,7 +166,7 @@ func (e *rootError) WithType(t Type) (err Error) {
 	return
 }
 
-// WithField adds a key-value pair to the error's structured context.
+// SetField adds a key-value pair to the error's structured context.
 // Fields provide additional machine-readable information about the error.
 //
 // Parameters:
@@ -175,7 +175,7 @@ func (e *rootError) WithType(t Type) (err Error) {
 //
 // Returns:
 //   - err (Error): the modified error (supports method chaining)
-func (e *rootError) WithField(key string, value interface{}) (err Error) {
+func (e *rootError) SetField(key string, value interface{}) (err Error) {
 	if e.fields == nil {
 		e.fields = make(map[string]interface{})
 	}
@@ -331,7 +331,7 @@ func (e *wrapError) StackFrames() (PCs []uintptr) {
 	return
 }
 
-// WithType associates a type with the error for classification purposes.
+// SetType associates a type with the error for classification purposes.
 // This enables error handling based on error categories/types.
 //
 // Parameters:
@@ -339,7 +339,7 @@ func (e *wrapError) StackFrames() (PCs []uintptr) {
 //
 // Returns:
 //   - err (Error): the modified error (supports method chaining)
-func (e *wrapError) WithType(t Type) (err Error) {
+func (e *wrapError) SetType(t Type) (err Error) {
 	e.t = t
 
 	err = e
@@ -347,7 +347,7 @@ func (e *wrapError) WithType(t Type) (err Error) {
 	return
 }
 
-// WithField adds a key-value pair to the error's structured context.
+// SetField adds a key-value pair to the error's structured context.
 // Fields provide additional machine-readable information about the error.
 //
 // Parameters:
@@ -356,7 +356,7 @@ func (e *wrapError) WithType(t Type) (err Error) {
 //
 // Returns:
 //   - err (Error): the modified error (supports method chaining)
-func (e *wrapError) WithField(key string, value interface{}) (err Error) {
+func (e *wrapError) SetField(key string, value interface{}) (err Error) {
 	if e.fields == nil {
 		e.fields = make(map[string]interface{})
 	}
@@ -382,8 +382,8 @@ type Error interface {
 	As(interface{}) bool
 	Unwrap() error
 	StackFrames() []uintptr
-	WithType(Type) Error
-	WithField(string, interface{}) Error
+	SetType(Type) Error
+	SetField(string, interface{}) Error
 }
 
 // Type represents a classification type for errors.
@@ -515,7 +515,7 @@ func wrap(err error, message string) (errr Error) {
 //   - (OptionFunc): configuration function for New/Wrap
 func WithType(t Type) OptionFunc {
 	return func(err Error) {
-		err.WithType(t)
+		err.SetType(t)
 	}
 }
 
@@ -529,7 +529,7 @@ func WithType(t Type) OptionFunc {
 //   - (OptionFunc): configuration function for New/Wrap
 func WithField(k string, v interface{}) OptionFunc {
 	return func(err Error) {
-		err.WithField(k, v)
+		err.SetField(k, v)
 	}
 }
 
