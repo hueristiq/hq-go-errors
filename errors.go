@@ -65,6 +65,17 @@ func (e *rootError) Fields() (fields map[string]interface{}) {
 	return
 }
 
+// StackFrames returns the raw PCs (program counters) from the call stack.
+// These can be used to reconstruct the full stack trace.
+//
+// Returns:
+//   - PCs ([]uintptr): slice of program counters representing the call stack
+func (e *rootError) StackFrames() (PCs []uintptr) {
+	PCs = *e.stack
+
+	return
+}
+
 // Is implements error equality checking. Two errors are considered equal if:
 //   - Both are nil, or
 //   - They are of the same type (*rootError), and:
@@ -76,16 +87,16 @@ func (e *rootError) Fields() (fields map[string]interface{}) {
 //   - target (error): the error to compare against
 //
 // Returns:
-//   - is (bool): true if errors are considered equal
-func (e *rootError) Is(target error) (is bool) {
+//   - result (bool): true if errors are considered equal
+func (e *rootError) Is(target error) (result bool) {
 	if target == nil {
-		is = e == nil
+		result = e == nil
 
 		return
 	}
 
 	if err, ok := target.(*rootError); ok {
-		is = (err.t == "" || e.t == err.t) && e.message == err.message
+		result = (err.t == "" || e.t == err.t) && e.message == err.message
 
 		return
 	}
@@ -102,8 +113,8 @@ func (e *rootError) Is(target error) (is bool) {
 //   - target (interface{}): pointer to interface or concrete type
 //
 // Returns:
-//   - as (bool): true if assignment was successful
-func (e *rootError) As(target interface{}) (as bool) {
+//   - result (bool): true if assignment was successful
+func (e *rootError) As(target interface{}) (result bool) {
 	if target == nil {
 		return
 	}
@@ -120,7 +131,7 @@ func (e *rootError) As(target interface{}) (as bool) {
 	if currentType.AssignableTo(targetType) {
 		val.Elem().Set(reflect.ValueOf(e))
 
-		as = true
+		result = true
 
 		return
 	}
@@ -135,17 +146,6 @@ func (e *rootError) As(target interface{}) (as bool) {
 //   - err (error): the wrapped error (may be nil)
 func (e rootError) Unwrap() (err error) {
 	err = e.wrapped
-
-	return
-}
-
-// StackFrames returns the raw PCs (program counters) from the call stack.
-// These can be used to reconstruct the full stack trace.
-//
-// Returns:
-//   - PCs ([]uintptr): slice of program counters representing the call stack
-func (e *rootError) StackFrames() (PCs []uintptr) {
-	PCs = *e.stack
 
 	return
 }
@@ -177,7 +177,7 @@ func (e *rootError) SetType(t Type) (err Error) {
 //   - err (Error): the modified error (supports method chaining)
 func (e *rootError) SetField(key string, value interface{}) (err Error) {
 	if e.fields == nil {
-		e.fields = make(map[string]interface{})
+		e.fields = map[string]interface{}{}
 	}
 
 	e.fields[key] = value
@@ -246,6 +246,17 @@ func (e *wrapError) Fields() (fields map[string]interface{}) {
 	return
 }
 
+// StackFrames returns the raw program counters from the call stack.
+// These can be used to reconstruct the full stack trace.
+//
+// Returns:
+//   - PCs ([]uintptr): slice of program counters representing the call stack
+func (e *wrapError) StackFrames() (PCs []uintptr) {
+	PCs = []uintptr{e.frame.pc()}
+
+	return
+}
+
 // Is implements error equality checking. Two errors are considered equal if:
 //   - Both are nil, or
 //   - They are of the same type (*wrapError), and:
@@ -257,16 +268,16 @@ func (e *wrapError) Fields() (fields map[string]interface{}) {
 //   - target (error): the error to compare against
 //
 // Returns:
-//   - is (bool): true if errors are considered equal
-func (e *wrapError) Is(target error) (is bool) {
+//   - result (bool): true if errors are considered equal
+func (e *wrapError) Is(target error) (result bool) {
 	if target == nil {
-		is = e == nil
+		result = e == nil
 
 		return
 	}
 
 	if err, ok := target.(*wrapError); ok {
-		is = (err.t == "" || e.t == err.t) && e.message == err.message
+		result = (err.t == "" || e.t == err.t) && e.message == err.message
 
 		return
 	}
@@ -283,8 +294,8 @@ func (e *wrapError) Is(target error) (is bool) {
 //   - target (interface{}): pointer to interface or concrete type
 //
 // Returns:
-//   - as (bool): true if assignment was successful
-func (e *wrapError) As(target interface{}) (as bool) {
+//   - result (bool): true if assignment was successful
+func (e *wrapError) As(target interface{}) (result bool) {
 	if target == nil {
 		return
 	}
@@ -301,7 +312,7 @@ func (e *wrapError) As(target interface{}) (as bool) {
 	if currentType.AssignableTo(targetType) {
 		val.Elem().Set(reflect.ValueOf(e))
 
-		as = true
+		result = true
 
 		return
 	}
@@ -316,17 +327,6 @@ func (e *wrapError) As(target interface{}) (as bool) {
 //   - err (error): the wrapped error (may be nil)
 func (e wrapError) Unwrap() (err error) {
 	err = e.err
-
-	return
-}
-
-// StackFrames returns the raw program counters from the call stack.
-// These can be used to reconstruct the full stack trace.
-//
-// Returns:
-//   - PCs ([]uintptr): slice of program counters representing the call stack
-func (e *wrapError) StackFrames() (PCs []uintptr) {
-	PCs = []uintptr{e.frame.pc()}
 
 	return
 }
@@ -358,7 +358,7 @@ func (e *wrapError) SetType(t Type) (err Error) {
 //   - err (Error): the modified error (supports method chaining)
 func (e *wrapError) SetField(key string, value interface{}) (err Error) {
 	if e.fields == nil {
-		e.fields = make(map[string]interface{})
+		e.fields = map[string]interface{}{}
 	}
 
 	e.fields[key] = value
@@ -376,14 +376,14 @@ func (e *wrapError) SetField(key string, value interface{}) (err Error) {
 //   - Standard error wrapping
 type Error interface {
 	error
-	Type() Type
-	Fields() map[string]interface{}
-	Is(error) bool
-	As(interface{}) bool
-	Unwrap() error
-	StackFrames() []uintptr
-	SetType(Type) Error
-	SetField(string, interface{}) Error
+	Type() (t Type)
+	Fields() (fields map[string]interface{})
+	StackFrames() (PCs []uintptr)
+	Is(target error) (result bool)
+	As(target interface{}) (result bool)
+	Unwrap() (err error)
+	SetType(t Type) (err Error)
+	SetField(key string, value interface{}) (err Error)
 }
 
 // Type represents a classification type for errors.
@@ -522,14 +522,14 @@ func WithType(t Type) OptionFunc {
 // WithField creates an OptionFunc that adds a field to an error.
 //
 // Parameters:
-//   - k (string): field key
-//   - v (interface{}): field value
+//   - key (string): field key
+//   - value (interface{}): field value
 //
 // Returns:
 //   - (OptionFunc): configuration function for New/Wrap
-func WithField(k string, v interface{}) OptionFunc {
+func WithField(key string, value interface{}) OptionFunc {
 	return func(err Error) {
-		err.SetField(k, v)
+		err.SetField(key, value)
 	}
 }
 
