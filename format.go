@@ -450,6 +450,7 @@ func Unpack(err error) (uerr UnpackedError) {
 				Type:    err.t,
 				Fields:  err.fields,
 			}
+
 			link.Frame = err.frame.resolveToStackFrame()
 
 			uerr.ErrChain = append([]ErrLink{link}, uerr.ErrChain...)
