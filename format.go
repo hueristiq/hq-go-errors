@@ -1,459 +1,507 @@
 package errors
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 )
 
-// UnpackedError contains all decomposed pieces of an error chain.
-// It provides structured access to the complete error hierarchy.
+// UnpackedError represents the decomposed structure of an error.
+// It breaks down complex errors into their constituent parts for easier formatting and analysis.
+// This struct is used internally by formatting functions to organize error information.
 //
 // Fields:
-//   - ErrExternal (error): The first non-package error encountered in the chain.
-//     This captures errors from other libraries or the standard library.
-//   - ErrRoot (ErrRoot): The original root error created by this package.
-//     Contains the core error message and stack trace.
-//   - ErrChain ([]ErrLink): Ordered sequence of wrapping operations.
-//     Each link represents additional context added through error wrapping.
+//   - ErrExternal (error): any external (non-package) error found in the chain
+//   - ErrRoot (ErrPart): the root error part, if present
+//   - ErrChain ([]ErrPart): the chain of wrapped error parts
+//   - ErrJoined ([]error): list of joined errors, if the error is a joined type
 type UnpackedError struct {
 	ErrExternal error
-	ErrRoot     ErrRoot
-	ErrChain    []ErrLink
+	ErrRoot     ErrPart
+	ErrChain    []ErrPart
+	ErrJoined   []error
 }
 
-// ErrRoot holds detailed information about a root error created by this package.
-// It represents the initial error in a chain before any wrapping operations.
+// ErrPart represents a single component of an error, either root or wrapped.
+// It encapsulates the key details of that error segment for formatting.
 //
 // Fields:
-//   - Message (string): Primary human-readable error message.
-//   - Type (Type): Optional error classification for programmatic handling.
-//   - Fields (map[string]interface{}): Structured key-value pairs providing
-//     additional context about the error (e.g., input parameters, state values).
-//   - Stack (Stack): Complete call stack captured at error creation time.
-//     Each frame contains method, file, and line information.
-type ErrRoot struct {
+//   - Message (string): the error message for this part
+//   - Type (Type): the classification type of this error part
+//   - Fields (map[string]any): structured key-value fields associated with this part
+//   - Stack (Stack): the stack trace frames for this error part
+type ErrPart struct {
 	Message string
 	Type    Type
-	Fields  map[string]interface{}
+	Fields  map[string]any
 	Stack   Stack
 }
 
-// formatStr serializes the ErrRoot into a human-readable string using the provided StringFormat.
-// format.Options controls inclusion of type, fields, and stack trace ordering.
-//
-// Parameters:
-//   - format (*StringFormat): formatting rules and separators.
-//
-// Returns:
-//   - formatted (string): the formatted error string.
-func (err *ErrRoot) formatStr(format *StringFormat) (formatted string) {
-	if err.Type != "" {
-		formatted += format.TypePrefix + string(err.Type) + format.TypeSuffix + format.TypeMessageSeparator
-	}
-
-	formatted += err.Message
-
-	if len(err.Fields) > 0 {
-		formatted += format.MessageFieldsSeparator + "Fields:" + format.FieldsTitleEntriesSeparator
-
-		first := true
-
-		for k, v := range err.Fields {
-			if !first {
-				formatted += format.FieldSep
-			}
-
-			formatted += fmt.Sprintf("  %s%s%v", k, format.FieldKVSep, v)
-
-			first = false
-		}
-	}
-
-	if format.Options.WithTrace {
-		formatted += format.FieldsStackSeparator + "Stack:" + format.StackTitleEntriesSeparator
-
-		stackArr := err.Stack.format(format.StackElemSep, format.Options.InvertTrace)
-
-		for i, frame := range stackArr {
-			formatted += format.PreStackSep + frame
-
-			if i < len(stackArr)-1 {
-				formatted += format.StackEntriesSeparator
-			}
-		}
-	}
-
-	return
-}
-
-// formatJSON constructs a JSON-ready map from ErrRoot according to JSONFormat rules.
-// format.Options.WithTrace controls whether the stack slice is included.
-//
-// Parameters:
-//   - format (*JSONFormat): formatting rules for JSON serialization.
-//
-// Returns:
-//   - formatted (map[string]interface{}): the JSON-like representation of the root error.
-func (err *ErrRoot) formatJSON(format *JSONFormat) (formatted map[string]interface{}) {
-	formatted = make(map[string]interface{})
-
-	formatted["message"] = err.Message
-
-	if err.Type != "" {
-		formatted["type"] = err.Type
-	}
-
-	if len(err.Fields) > 0 {
-		formatted["fields"] = err.Fields
-	}
-
-	if format.Options.WithTrace {
-		formatted["stack"] = err.Stack.format(format.StackElemSep, format.Options.InvertTrace)
-	}
-
-	return
-}
-
-// ErrLink represents a single wrapping operation in an error chain.
-// Each wrap adds contextual information while preserving the original error.
+// Formatter is responsible for converting errors into human-readable string or JSON formats.
+// It uses configurable options to control the output structure and content.
 //
 // Fields:
-//   - Message (string): Contextual message added during wrapping.
-//   - Type (Type): Optional classification for this wrap level.
-//   - Fields (map[string]interface{}): Additional context specific to this wrap.
-//   - Frame (StackFrame): Single stack frame capturing where the wrap occurred.
-type ErrLink struct {
-	Message string
-	Type    Type
-	Fields  map[string]interface{}
-	Frame   StackFrame
+//   - options (*FormatterOptions): the configuration options for formatting
+type Formatter struct {
+	options *FormatterOptions
 }
 
-// formatStr serializes the ErrLink into a string according to StringFormat rules.
-// format.Options controls inclusion of type, fields, and single frame output.
+// String formats the error as a multi-line string.
+// It handles both chain and joined errors differently.
 //
 // Parameters:
-//   - format (*StringFormat): formatting rules and separators.
+//   - err (error): the error to format
 //
 // Returns:
-//   - formatted (string): the formatted wrap link string.
-func (eLink *ErrLink) formatStr(format *StringFormat) (formatted string) {
-	if eLink.Type != "" {
-		formatted += format.TypePrefix + string(eLink.Type) + format.TypeSuffix + format.TypeMessageSeparator
+//   - formated (string): the formatted string representation, or empty if err is nil
+func (f *Formatter) String(err error) (formated string) {
+	if err == nil {
+		return
 	}
 
-	formatted += eLink.Message
+	switch e := err.(type) {
+	case *joined:
+		formated = f.formatJoinedString(e)
 
-	if len(eLink.Fields) > 0 {
-		formatted += format.MessageFieldsSeparator + "Fields:" + format.FieldsTitleEntriesSeparator
+		return
+	default:
+		formated = f.formatChainString(err)
 
-		first := true
+		return
+	}
+}
 
-		for k, v := range eLink.Fields {
-			if !first {
-				formatted += format.FieldSep
-			}
+// JSON formats the error as a map suitable for JSON encoding.
+// It handles both chain and joined errors differently.
+//
+// Parameters:
+//   - err (error): the error to format
+//
+// Returns:
+//   - formated (map[string]any): the formatted map, or nil if err is nil
+func (f *Formatter) JSON(err error) (formated map[string]any) {
+	if err == nil {
+		return
+	}
 
-			formatted += fmt.Sprintf("  %s%s%v", k, format.FieldKVSep, v)
+	switch e := err.(type) {
+	case *joined:
+		formated = f.formatJoinedJSON(e)
 
-			first = false
+		return
+	default:
+		formated = f.formatChainJSON(err)
+
+		return
+	}
+}
+
+// formatChainString formats a chain error (root + wraps) into a string.
+// It unpacks the error and assembles parts based on options (e.g., order, external inclusion).
+//
+// Parameters:
+//   - err (error): the chain error to format
+//
+// Returns:
+//   - (string): the formatted string
+func (f *Formatter) formatChainString(err error) string {
+	unpacked := Unpack(err)
+
+	var parts []string
+
+	if f.options.IsInnerFirst {
+		if unpacked.ErrExternal != nil && (f.options.WithExternal || f.isOnlyExternal(&unpacked)) {
+			parts = append(parts, f.formatExternalString(unpacked.ErrExternal))
+		}
+
+		if f.hasRootContent(&unpacked.ErrRoot) {
+			parts = append(parts, f.formatPartString(&unpacked.ErrRoot, "root"))
+		}
+
+		for i := len(unpacked.ErrChain) - 1; i >= 0; i-- {
+			parts = append(parts, f.formatPartString(&unpacked.ErrChain[i], "wrap"))
+		}
+	} else {
+		for i := range len(unpacked.ErrChain) {
+			parts = append(parts, f.formatPartString(&unpacked.ErrChain[i], "wrap"))
+		}
+
+		if f.hasRootContent(&unpacked.ErrRoot) {
+			parts = append(parts, f.formatPartString(&unpacked.ErrRoot, "root"))
+		}
+
+		if unpacked.ErrExternal != nil && (f.options.WithExternal || f.isOnlyExternal(&unpacked)) {
+			parts = append(parts, f.formatExternalString(unpacked.ErrExternal))
 		}
 	}
 
-	if format.Options.WithTrace {
-		formatted += format.FieldsStackSeparator + "Stack:" + format.StackTitleEntriesSeparator
+	separator := "\n\n"
 
-		formatted += format.PreStackSep + eLink.Frame.format(format.StackElemSep)
-	}
-
-	return
+	return strings.Join(parts, separator)
 }
 
-// formatJSON constructs a JSON-ready map from ErrLink according to JSONFormat rules.
-// format.Options.WithTrace controls whether the frame is included.
+// formatPartString formats a single ErrPart into a string.
+// It includes type, message, fields, and optional trace.
 //
 // Parameters:
-//   - format (*JSONFormat): formatting rules for JSON serialization.
+//   - part (*ErrPart): the error part to format
+//   - kind (string): the kind of part ("root" or "wrap") for trace labeling
 //
 // Returns:
-//   - formatted (map[string]interface{}): the map representation of the wrap link.
-func (eLink *ErrLink) formatJSON(format *JSONFormat) (formatted map[string]interface{}) {
-	formatted = make(map[string]interface{})
+//   - (string): the formatted string for this part
+func (f *Formatter) formatPartString(part *ErrPart, kind string) string {
+	var buf strings.Builder
 
-	formatted["message"] = eLink.Message
-
-	if eLink.Type != "" {
-		formatted["type"] = eLink.Type
+	if part.Type != "" {
+		buf.WriteString("[")
+		buf.WriteString(string(part.Type))
+		buf.WriteString("]" + f.options.Spacing)
 	}
 
-	if len(eLink.Fields) > 0 {
-		formatted["fields"] = eLink.Fields
+	buf.WriteString(part.Message)
+
+	if len(part.Fields) > 0 {
+		buf.WriteString("\n\nFields:")
+
+		for k, v := range part.Fields {
+			buf.WriteString(fmt.Sprintf("\n%s%s:%s%v", f.options.Indentation, k, f.options.Spacing, v))
+		}
 	}
 
-	if format.Options.WithTrace {
-		formatted["stack"] = eLink.Frame.format(format.StackElemSep)
+	if f.options.WithTrace && len(part.Stack) > 0 {
+		frames := part.Stack
+
+		buf.WriteString(fmt.Sprintf("\n\n%s Trace:", kind))
+
+		for _, frame := range frames {
+			buf.WriteString(fmt.Sprintf("\n%s%s%s(%s:%d)", f.options.Indentation, frame.Name, f.options.Spacing, frame.File, frame.Line))
+		}
 	}
 
-	return
+	return buf.String()
 }
 
-// FormatOptions controls error rendering behavior across all output formats.
+// formatExternalString formats an external error into a string.
+// It includes trace if configured, otherwise just the error message.
+//
+// Parameters:
+//   - err (error): the external error to format
+//
+// Returns:
+//   - (string): the formatted string
+func (f *Formatter) formatExternalString(err error) string {
+	if f.options.WithTrace {
+		return fmt.Sprintf("%+v", err)
+	}
+
+	return err.Error()
+}
+
+// formatJoinedString formats a joined error into a string.
+// It includes the count, optional join location, and formats each sub-error recursively.
+//
+// Parameters:
+//   - joinErr (*joined): the joined error to format
+//
+// Returns:
+//   - (string): the formatted string
+func (f *Formatter) formatJoinedString(joinErr *joined) string {
+	var buf strings.Builder
+
+	buf.WriteString(fmt.Sprintf("Multiple errors (%d):", len(joinErr.errors)))
+
+	if f.options.WithTrace && joinErr.trace != nil {
+		frames := joinErr.trace.resolveToStackFrames()
+
+		if len(frames) > 0 {
+			buf.WriteString("\n\nJoin Location:")
+
+			if len(frames) > 0 {
+				frame := frames[0]
+
+				buf.WriteString(fmt.Sprintf("\n%s%s%s(%s:%d)", f.options.Indentation, frame.Name, f.options.Spacing, frame.File, frame.Line))
+			}
+		}
+	}
+
+	for i, err := range joinErr.errors {
+		if err == nil {
+			continue
+		}
+
+		buf.WriteString(fmt.Sprintf("\n\n%d. %s", i+1, f.String(err)))
+	}
+
+	return buf.String()
+}
+
+// formatChainJSON formats a chain error into a JSON-compatible map.
+// It unpacks the error and structures it with optional reversal based on options.
+//
+// Parameters:
+//   - err (error): the chain error to format
+//
+// Returns:
+//   - (map[string]any): the formatted map
+func (f *Formatter) formatChainJSON(err error) map[string]any {
+	unpacked := Unpack(err)
+	result := make(map[string]any)
+
+	if unpacked.ErrExternal != nil && (f.options.WithExternal || f.isOnlyExternal(&unpacked)) {
+		result["external"] = map[string]any{
+			"message": unpacked.ErrExternal.Error(),
+			"go_type": fmt.Sprintf("%T", unpacked.ErrExternal),
+		}
+	}
+
+	if f.hasRootContent(&unpacked.ErrRoot) {
+		result["root"] = f.formatPartJSON(&unpacked.ErrRoot)
+	}
+
+	if len(unpacked.ErrChain) > 0 {
+		var chain []map[string]any
+
+		for _, part := range unpacked.ErrChain {
+			chain = append(chain, f.formatPartJSON(&part))
+		}
+
+		if f.options.IsInnerFirst {
+			for i := len(chain)/2 - 1; i >= 0; i-- {
+				opp := len(chain) - 1 - i
+
+				chain[i], chain[opp] = chain[opp], chain[i]
+			}
+		}
+
+		result["chain"] = chain
+	}
+
+	return result
+}
+
+// formatPartJSON formats a single ErrPart into a JSON-compatible map.
+// It includes message, type, fields, and optional stack with possible inversion.
+//
+// Parameters:
+//   - part (*ErrPart): the error part to format
+//
+// Returns:
+//   - (map[string]any): the formatted map
+func (f *Formatter) formatPartJSON(part *ErrPart) map[string]any {
+	result := map[string]any{
+		"message": part.Message,
+	}
+
+	if part.Type != "" {
+		result["type"] = string(part.Type)
+	}
+
+	if len(part.Fields) > 0 {
+		result["fields"] = part.Fields
+	}
+
+	if f.options.WithTrace && len(part.Stack) > 0 {
+		var frames []map[string]any
+
+		stack := part.Stack
+
+		for _, frame := range stack {
+			frameMap := map[string]any{
+				"function": frame.Name,
+				"file":     frame.File,
+				"line":     frame.Line,
+			}
+
+			frames = append(frames, frameMap)
+		}
+
+		if f.options.InvertTrace {
+			for i := len(frames)/2 - 1; i >= 0; i-- {
+				opp := len(frames) - 1 - i
+
+				frames[i], frames[opp] = frames[opp], frames[i]
+			}
+		}
+
+		result["stack"] = frames
+	}
+
+	return result
+}
+
+// formatJoinedJSON formats a joined error into a JSON-compatible map.
+// It includes type, count, optional join stack, and recursively formats sub-errors.
+//
+// Parameters:
+//   - joinErr (*joined): the joined error to format
+//
+// Returns:
+//   - (map[string]any): the formatted map
+func (f *Formatter) formatJoinedJSON(joinErr *joined) map[string]any {
+	result := map[string]any{
+		"type":  "joined",
+		"count": len(joinErr.errors),
+	}
+
+	if f.options.WithTrace && joinErr.trace != nil {
+		frames := joinErr.trace.resolveToStackFrames()
+
+		if len(frames) > 0 {
+			var joinFrames []map[string]any
+
+			for _, frame := range frames {
+				joinFrames = append(joinFrames, map[string]any{
+					"function": frame.Name,
+					"file":     frame.File,
+					"line":     frame.Line,
+				})
+			}
+
+			result["join_stack"] = joinFrames
+		}
+	}
+
+	var errors []any
+
+	for _, err := range joinErr.errors {
+		if err != nil {
+			errors = append(errors, f.JSON(err))
+		}
+	}
+
+	result["errors"] = errors
+
+	return result
+}
+
+// hasRootContent checks if the root ErrPart has any meaningful content.
+// Used to decide whether to include the root in formatting.
+//
+// Parameters:
+//   - root (*ErrPart): the root part to check
+//
+// Returns:
+//   - (bool): true if it has a message or stack frames
+func (f *Formatter) hasRootContent(root *ErrPart) bool {
+	return root.Message != "" || len(root.Stack) > 0
+}
+
+// isOnlyExternal checks if the unpacked error consists only of an external error.
+// Used to decide inclusion when WithExternal is false.
+//
+// Parameters:
+//   - unpacked (*UnpackedError): the unpacked error to check
+//
+// Returns:
+//   - (bool): true if only external error is present
+func (f *Formatter) isOnlyExternal(unpacked *UnpackedError) bool {
+	return unpacked.ErrExternal != nil && unpacked.ErrRoot.Message == "" && len(unpacked.ErrChain) == 0
+}
+
+// FormatterOptions holds configuration for the Formatter.
+// It controls aspects like order, trace inclusion, and formatting style.
 //
 // Fields:
-//   - InvertOutput (bool): When true, displays wrap chain before root error.
-//   - WithTrace (bool): When true, includes stack trace information.
-//   - InvertTrace (bool): When true, reverses stack frame order.
-//   - WithExternal (bool): When true, includes external errors in output.
-type FormatOptions struct {
-	InvertOutput bool
+//   - IsInnerFirst (bool): if true, format from inner to outer (default: false)
+//   - WithTrace (bool): include stack traces (default: false)
+//   - InvertTrace (bool): invert stack trace order (default: false)
+//   - WithExternal (bool): include external errors (default: true)
+//   - Spacing (string): spacing between elements (default: " ")
+//   - Indentation (string): indentation for nested elements (default: "  ")
+type FormatterOptions struct {
+	IsInnerFirst bool
 	WithTrace    bool
 	InvertTrace  bool
 	WithExternal bool
+	Spacing      string
+	Indentation  string
 }
 
-// StringFormat defines separators and rules for rendering errors as human-readable strings.
-// It uses FormatOptions to determine which parts of the error to include.
-//
-// Fields:
-//   - Options (*FormatOptions): controls inclusion of messages, fields, and traces.
-//   - TypePrefix (string): prefix for error type in text output.
-//   - TypeSuffix (string): suffix for error type.
-//   - TypeMessageSeparator (string): separator between type and message.
-//   - MessageFieldsSeparator (string): separator before structured fields block.
-//   - FieldSep (string): separator between field entries.
-//   - FieldKVSep (string): separator between key and value in fields.
-//   - FieldsTitleEntriesSeparator (string): separator after "Fields:" title.
-//   - FieldsStackSeparator (string): separator before "Stack:" block.
-//   - StackTitleEntriesSeparator (string): separator after "Stack:" title.
-//   - StackEntriesSeparator (string): separator between individual frames.
-//   - PreStackSep (string): prefix for each stack frame line.
-//   - StackElemSep (string): separator between elements in a frame line.
-//   - ErrorSep  (string): separator between errors in a chain.
-type StringFormat struct {
-	Options                     *FormatOptions
-	TypePrefix                  string
-	TypeSuffix                  string
-	TypeMessageSeparator        string
-	MessageFieldsSeparator      string
-	FieldSep                    string
-	FieldKVSep                  string
-	FieldsTitleEntriesSeparator string
-	FieldsStackSeparator        string
-	StackTitleEntriesSeparator  string
-	StackEntriesSeparator       string
-	PreStackSep                 string
-	StackElemSep                string
-	ErrorSep                    string
-}
+// FormatterOptionFunc is a function type for configuring FormatterOptions.
+// Used with NewFormatter to set custom options.
+type FormatterOptionFunc func(options *FormatterOptions)
 
-// JSONFormat defines rules for serializing errors into JSON-like maps.
-// It uses FormatOptions to choose which parts to include and how to represent stack elements.
-//
-// Fields:
-//   - Options (*FormatOptions): controls inclusion of external and trace information.
-//   - StackElemSep (string): separator between method, file, and line in frame strings.
-type JSONFormat struct {
-	Options      *FormatOptions
-	StackElemSep string
-}
-
-// NewDefaultStringFormat returns a StringFormat with default separators based on options.WithTrace.
+// NewFormatter creates a new Formatter with default or custom options.
+// Defaults: outer-first, no trace, no invert, include external, space " ", indent "  ".
 //
 // Parameters:
-//   - options (*FormatOptions): flags controlling output sections.
+//   - ofs (...FormatterOptionFunc): variadic option functions
 //
 // Returns:
-//   - format (*StringFormat): the configured format object.
-func NewDefaultStringFormat(options *FormatOptions) (format *StringFormat) {
-	format = &StringFormat{
-		Options: options,
-	}
-
-	if options.WithTrace {
-		format.TypePrefix = "["
-		format.TypeSuffix = "]"
-		format.TypeMessageSeparator = " "
-		format.MessageFieldsSeparator = "\n\n"
-		format.FieldSep = ","
-		format.FieldKVSep = "="
-		format.FieldsTitleEntriesSeparator = "\n"
-		format.FieldsStackSeparator = "\n\n"
-		format.StackTitleEntriesSeparator = "\n"
-		format.StackEntriesSeparator = "\n"
-		format.PreStackSep = "  "
-		format.StackElemSep = ":"
-		format.ErrorSep = "\n\n"
-	} else {
-		format.TypePrefix = "["
-		format.TypeSuffix = "]"
-		format.TypeMessageSeparator = " "
-		format.MessageFieldsSeparator = "\n\n"
-		format.FieldsTitleEntriesSeparator = "\n"
-		format.FieldsStackSeparator = "\n\n"
-		format.ErrorSep = "\n\n"
-		format.FieldSep = " "
-		format.FieldKVSep = "="
-	}
-
-	return
-}
-
-// ToString formats err into a human-readable string using default StringFormat.
-//
-// Parameters:
-//   - err (error): the error to format.
-//   - withTrace (bool): whether to include stack traces.
-//
-// Returns:
-//   - formatted (string): the formatted error string.
-func ToString(err error, withTrace bool) (formatted string) {
-	return ToCustomString(err, NewDefaultStringFormat(&FormatOptions{
-		WithTrace:    withTrace,
+//   - formatter (*Formatter): the new formatter instance
+func NewFormatter(ofs ...FormatterOptionFunc) (formatter *Formatter) {
+	options := &FormatterOptions{
+		IsInnerFirst: false,
+		WithTrace:    false,
+		InvertTrace:  false,
 		WithExternal: true,
-	}))
-}
+		Spacing:      " ",
+		Indentation:  "  ",
+	}
 
-// ToCustomString formats err using the provided StringFormat.
-//
-// Parameters:
-//   - err (error): the error to format.
-//   - format (*StringFormat): formatting rules and separators.
-//
-// Returns:
-//   - formatted (string): the formatted error string.
-func ToCustomString(err error, format *StringFormat) (formatted string) {
-	upErr := Unpack(err)
+	for _, f := range ofs {
+		f(options)
+	}
 
-	if format.Options.InvertOutput {
-		if format.Options.WithExternal && upErr.ErrExternal != nil {
-			formatted += formatExternalStr(upErr.ErrExternal, format.Options.WithTrace)
-
-			if (format.Options.WithTrace && len(upErr.ErrRoot.Stack) > 0) || upErr.ErrRoot.Message != "" {
-				formatted += format.StackEntriesSeparator
-			}
-		}
-
-		formatted += upErr.ErrRoot.formatStr(format)
-
-		for _, eLink := range upErr.ErrChain {
-			formatted += format.ErrorSep + eLink.formatStr(format)
-		}
-	} else {
-		for i := len(upErr.ErrChain) - 1; i >= 0; i-- {
-			formatted += upErr.ErrChain[i].formatStr(format) + format.ErrorSep
-		}
-
-		formatted += upErr.ErrRoot.formatStr(format)
-
-		if format.Options.WithExternal && upErr.ErrExternal != nil {
-			if (format.Options.WithTrace && len(upErr.ErrRoot.Stack) > 0) || upErr.ErrRoot.Message != "" {
-				formatted += format.ErrorSep
-			}
-
-			formatted += formatExternalStr(upErr.ErrExternal, format.Options.WithTrace)
-		}
+	formatter = &Formatter{
+		options: options,
 	}
 
 	return
 }
 
-// NewDefaultJSONFormat returns a JSONFormat with default separators.
-//
-// Parameters:
-//   - options (*FormatOptions): flags controlling output sections.
-//
-// Returns:
-//   - format (*JSONFormat): the configured format object.
-func NewDefaultJSONFormat(options *FormatOptions) (format *JSONFormat) {
-	format = &JSONFormat{
-		Options:      options,
-		StackElemSep: ":",
+// FormatWithTrace returns an option function to enable stack traces.
+func FormatWithTrace() (f FormatterOptionFunc) {
+	return func(options *FormatterOptions) {
+		options.WithTrace = true
 	}
-
-	return
 }
 
-// ToJSON formats err into a JSON-ready map using default JSONFormat.
+// Unpack decomposes an error into its parts.
+// It handles joined, root, wrapped, and external errors.
+//
+// The unpacking process:
+//  1. If joined, sets ErrJoined and returns.
+//  2. Traverses the chain using Unwrap.
+//  3. For root/wrapped, extracts to ErrRoot/ErrChain.
+//  4. For external, sets ErrExternal.
 //
 // Parameters:
-//   - err (error): the error to format.
-//   - withTrace (bool): whether to include stack traces.
+//   - err (error): the error to unpack
 //
 // Returns:
-//   - formatted (map[string]interface{}): the JSON-like representation of the error chain.
-func ToJSON(err error, withTrace bool) (formatted map[string]interface{}) {
-	return ToCustomJSON(err, NewDefaultJSONFormat(&FormatOptions{
-		WithTrace:    withTrace,
-		WithExternal: true,
-	}))
-}
-
-// ToCustomJSON formats err using the provided JSONFormat.
-//
-// Parameters:
-//   - err (error): the error to format.
-//   - format (*JSONFormat): formatting rules for JSON serialization.
-//
-// Returns:
-//   - formatted (map[string]interface{}): the JSON-like representation of the error chain.
-func ToCustomJSON(err error, format *JSONFormat) (formatted map[string]interface{}) {
-	upErr := Unpack(err)
-
-	formatted = make(map[string]interface{})
-
-	if format.Options.WithExternal && upErr.ErrExternal != nil {
-		formatted["external"] = formatExternalStr(upErr.ErrExternal, format.Options.WithTrace)
-	}
-
-	if upErr.ErrRoot.Message != "" || len(upErr.ErrRoot.Stack) > 0 {
-		formatted["root"] = upErr.ErrRoot.formatJSON(format)
-	}
-
-	if len(upErr.ErrChain) > 0 {
-		var wrapArr []map[string]interface{}
-
-		for _, eLink := range upErr.ErrChain {
-			wrapMap := eLink.formatJSON(format)
-
-			if format.Options.InvertOutput {
-				wrapArr = append(wrapArr, wrapMap)
-			} else {
-				wrapArr = append([]map[string]interface{}{wrapMap}, wrapArr...)
-			}
-		}
-
-		formatted["wrap"] = wrapArr
-	}
-
-	return
-}
-
-// Unpack traverses the error chain by repeatedly calling Unwrap.
-// For a rootError, it populates ErrRoot; for each wrapError, it adds an ErrLink;
-// any other error becomes ErrExternal.
-//
-// Parameters:
-//   - err (error): the error to decompose.
-//
-// Returns:
-//   - uerr (UnpackedError): a struct containing ErrExternal, ErrRoot, and ErrChain.
+//   - uerr (UnpackedError): the unpacked structure
 func Unpack(err error) (uerr UnpackedError) {
+	if joinErr, ok := err.(*joined); ok {
+		uerr.ErrJoined = joinErr.errors
+
+		return
+	}
+
 	for err != nil {
-		switch err := err.(type) {
-		case *rootError:
-			uerr.ErrRoot.Message = err.message
-			uerr.ErrRoot.Type = err.t
-			uerr.ErrRoot.Fields = err.fields
-			uerr.ErrRoot.Stack = err.stack.resolveToStackFrames()
-		case *wrapError:
-			link := ErrLink{
-				Message: err.message,
-				Type:    err.t,
-				Fields:  err.fields,
+		switch e := err.(type) {
+		case *root:
+			uerr.ErrRoot = ErrPart{
+				Type:    e.errType,
+				Message: e.message,
+				Fields:  e.fields,
 			}
 
-			link.Frame = err.frame.resolveToStackFrame()
+			if e.trace != nil {
+				uerr.ErrRoot.Stack = e.trace.resolveToStackFrames()
+			}
+		case *wrapped:
+			part := ErrPart{
+				Type:    e.errType,
+				Message: e.message,
+				Fields:  e.fields,
+			}
 
-			uerr.ErrChain = append([]ErrLink{link}, uerr.ErrChain...)
+			if e.frame != nil {
+				part.Stack = Stack{e.frame.resolveToStackFrame()}
+			}
+
+			uerr.ErrChain = append(uerr.ErrChain, part)
 		default:
 			uerr.ErrExternal = err
 
@@ -466,21 +514,63 @@ func Unpack(err error) (uerr UnpackedError) {
 	return
 }
 
-// formatExternalStr renders an external error to a string.
-// If withTrace is true, fmt.Sprintf("%+v", err) is used to include the external error's stack.
+// ToString is a convenience function to format an error as a string.
+// It creates a formatter with options and calls String.
 //
 // Parameters:
-//   - err (error): the external error.
-//   - withTrace (bool): whether to include the error's own stack trace.
+//   - err (error): the error to format
+//   - ofs (...FormatterOptionFunc): optional configuration
 //
 // Returns:
-//   - s (string): the rendered error string.
-func formatExternalStr(err error, withTrace bool) (s string) {
-	s = fmt.Sprint(err)
+//   - formated (string): the formatted string
+func ToString(err error, ofs ...FormatterOptionFunc) (formated string) {
+	formatter := NewFormatter(ofs...)
 
-	if withTrace {
-		s = fmt.Sprintf("%+v", err)
+	formated = formatter.String(err)
+
+	return
+}
+
+// ToJSON is a convenience function to format an error as a JSON map.
+// It creates a formatter with options and calls JSON.
+//
+// Parameters:
+//   - err (error): the error to format
+//   - ofs (...FormatterOptionFunc): optional configuration
+//
+// Returns:
+//   - formated (map[string]any): the formatted map
+func ToJSON(err error, ofs ...FormatterOptionFunc) (formated map[string]any) {
+	formatter := NewFormatter(ofs...)
+
+	formated = formatter.JSON(err)
+
+	return
+}
+
+// ToJSONString is a convenience function to format an error as a JSON string.
+// It uses ToJSON and marshals with indentation.
+//
+// Parameters:
+//   - err (error): the error to format
+//   - ofs (...FormatterOptionFunc): optional configuration
+//
+// Returns:
+//   - formated (string): the JSON string, or error message if marshaling fails
+func ToJSONString(err error, ofs ...FormatterOptionFunc) (formated string) {
+	data := ToJSON(err, ofs...)
+	if data == nil {
+		return
 	}
+
+	bytes, jsonErr := json.MarshalIndent(data, "", "  ")
+	if jsonErr != nil {
+		formated = fmt.Sprintf("JSON formatting error: %v", jsonErr)
+
+		return
+	}
+
+	formated = string(bytes)
 
 	return
 }

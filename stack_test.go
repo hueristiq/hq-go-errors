@@ -49,6 +49,16 @@ func TestStackFrame_format(t *testing.T) {
 			separator: " ",
 			expected:  "pkg.(*Type).Method /path with spaces/file.go 100",
 		},
+		{
+			name: "separator with special chars",
+			frame: StackFrame{
+				Name: "func",
+				File: "file.go",
+				Line: 1,
+			},
+			separator: "\t-\t",
+			expected:  "func\t-\tfile.go\t-\t1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -73,12 +83,14 @@ func TestStack_format(t *testing.T) {
 
 	tests := []struct {
 		name      string
+		stack     Stack
 		separator string
 		invert    bool
 		expected  []string
 	}{
 		{
 			name:      "natural order",
+			stack:     frames,
 			separator: " ",
 			invert:    false,
 			expected: []string{
@@ -89,6 +101,7 @@ func TestStack_format(t *testing.T) {
 		},
 		{
 			name:      "reverse order",
+			stack:     frames,
 			separator: "\t",
 			invert:    true,
 			expected: []string{
@@ -97,13 +110,34 @@ func TestStack_format(t *testing.T) {
 				"func3\tfile3.go\t3",
 			},
 		},
+		{
+			name:      "empty stack",
+			stack:     Stack{},
+			separator: "|",
+			invert:    false,
+			expected:  []string{},
+		},
+		{
+			name:      "single frame natural",
+			stack:     Stack{{Name: "func", File: "file.go", Line: 1}},
+			separator: ",",
+			invert:    false,
+			expected:  []string{"func,file.go,1"},
+		},
+		{
+			name:      "single frame reverse",
+			stack:     Stack{{Name: "func", File: "file.go", Line: 1}},
+			separator: ",",
+			invert:    true,
+			expected:  []string{"func,file.go,1"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := frames.format(tt.separator, tt.invert)
+			result := tt.stack.format(tt.separator, tt.invert)
 
 			assert.Equal(t, tt.expected, result)
 		})
@@ -170,7 +204,9 @@ func TestStack_resolveToStackFrames(t *testing.T) {
 
 		require.Less(t, i, len(result), "More frames from runtime than from resolveToStackFrames")
 
-		assert.Equal(t, filepath.Base(runtimeFrame.Function), result[i].Name)
+		assert.Equal(t, filepath.Base(runtimeFrame.Function), filepath.Base(result[i].Name))
+		assert.Equal(t, runtimeFrame.File, result[i].File)
+		assert.Equal(t, runtimeFrame.Line, result[i].Line)
 
 		if !more {
 			break
@@ -213,6 +249,18 @@ func TestStack_insertPC(t *testing.T) {
 			insert:   stack{0x333, 0x444},
 			expected: stack{0x111, 0x222},
 		},
+		{
+			name:     "insert empty PCs",
+			original: stack{0x111},
+			insert:   stack{},
+			expected: stack{0x111},
+		},
+		{
+			name:     "insert multiple matches",
+			original: stack{0x111, 0x444, 0x222, 0x444},
+			insert:   stack{0x333, 0x444},
+			expected: stack{0x111, 0x333, 0x444, 0x222, 0x444},
+		},
 	}
 
 	for _, tt := range tests {
@@ -248,7 +296,6 @@ func TestStack_isGlobal(t *testing.T) {
 			pcs:      stack{0x123, 0x456},
 			expected: false,
 		},
-		// Can't easily test true case without actually calling init functions
 	}
 
 	for _, tt := range tests {
@@ -275,9 +322,13 @@ func TestCaller(t *testing.T) {
 
 	resolved := result.resolveToStackFrame()
 
-	assert.Equal(t, "TestCaller", strings.Split(resolved.Name, ".")[1], "Should get the frame of the caller function")
-	assert.Equal(t, file, resolved.File, "File should match")
-	assert.Greater(t, resolved.Line, line, "Resolved line should be after the runtime.Caller call")
+	assert.Equal(t, "TestCaller", strings.Split(resolved.Name, ".")[1])
+	assert.Equal(t, file, resolved.File)
+	assert.Greater(t, resolved.Line, line)
+
+	nilResult := caller(1000)
+
+	assert.Nil(t, nilResult)
 }
 
 func TestCallers(t *testing.T) {
@@ -296,11 +347,18 @@ func TestCallers(t *testing.T) {
 	}
 
 	innerResult := callers(2)
+
+	require.NotNil(t, innerResult)
+
 	innerFrames := innerResult.resolveToStackFrames()
 
 	if len(frames) > 0 && len(innerFrames) > 0 {
 		assert.NotEqual(t, frames[0].Name, innerFrames[0].Name, "First frame should be different when skipping")
 	}
+
+	emptyResult := callers(1000)
+
+	assert.Empty(t, *emptyResult)
 }
 
 func TestInsertHelper(t *testing.T) {
@@ -334,6 +392,13 @@ func TestInsertHelper(t *testing.T) {
 			at:       2,
 			expected: stack{0x1, 0x2, 0x3},
 		},
+		{
+			name:     "insert into empty",
+			input:    stack{},
+			insert:   0x1,
+			at:       0,
+			expected: stack{0x1},
+		},
 	}
 
 	for _, tt := range tests {
@@ -345,4 +410,29 @@ func TestInsertHelper(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestFrame_resolveToStackFrame_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	f := frame(0)
+
+	result := f.resolveToStackFrame()
+
+	assert.Empty(t, result.Name)
+	assert.Empty(t, result.File)
+	assert.Zero(t, result.Line)
+}
+
+func TestStack_resolveToStackFrames_InvalidPCs(t *testing.T) {
+	t.Parallel()
+
+	s := stack{0}
+
+	result := s.resolveToStackFrames()
+
+	assert.Len(t, result, 1)
+	assert.Empty(t, result[0].Name)
+	assert.Empty(t, result[0].File)
+	assert.Zero(t, result[0].Line)
 }

@@ -11,6 +11,8 @@
 - [Usage](#usage)
 	- [Creating Errors](#creating-errors)
 	- [Wrapping Errors](#wrapping-errors)
+	- [Joining Multiple Errors](#joining-multiple-errors)
+	- [Structured Types & Fields](#structured-types--fields)
 	- [Unwrapping, `Is`, `As`, and `Cause`](#unwrapping-is-as-and-cause)
 	- [Formatting Errors](#formatting-errors)
 		- [... to String](#-to-string)
@@ -24,6 +26,7 @@
 - **Error Chaining:** Wrap errors to add context while preserving the original stack trace and error details.
 - **Error Classification:** Assign `ErrorType` values to categorize errors for programmatic handling.
 - **Structured Fields:** Attach arbitrary key-value metadata (e.g., request IDs, parameters) to errors for enhanced debugging.
+- **Multi-Error Support:** Join multiple errors into a single error object with a shared stack trace.
 - **Flexible Formatting:** Render errors as human-readable strings or JSON-like maps, with options to include/exclude stack traces, invert chain order, or handle external errors.
 - **Standards-Compliant:** Implements Go’s standard `error`, `Unwrap`, `Is`, and `As` interfaces, plus additional helpers like `Cause` for root cause analysis.
 
@@ -41,7 +44,7 @@ Make sure your Go environment is set up properly (Go 1.13 or later is recommende
 
 ### Creating Errors
 
-Use `hqgoerrors.New` to create a root error with a full call stack captured at the point of invocation.
+Use `New` to create a root error with a full call stack captured at the point of invocation.
 
 ```go
 package main
@@ -62,7 +65,7 @@ func main() {
 
 ### Wrapping Errors
 
-Use `hqgoerrors.Wrap` to add context to an existing error, capturing a single stack frame at the wrap point while preserving the original error’s stack trace.
+Use `Wrap` to add context to an existing error, capturing a single stack frame at the wrap point while preserving the original error’s stack trace.
 
 ```go
 package main
@@ -86,6 +89,38 @@ func main() {
 }
 ```
 
+### Joining Multiple Errors
+
+Use `Join` to combine multiple errors into a single error object, capturing a stack trace at the join point.
+
+```go
+package main
+
+import (
+	"fmt"
+
+	hqgoerrors "github.com/hueristiq/hq-go-errors"
+)
+
+func task1() error {
+	return hqgoerrors.New("task 1 failed")
+}
+
+func task2() error {
+	return hqgoerrors.New("task 2 failed")
+}
+
+func main() {
+	err1 := task1()
+	err2 := task2()
+
+	err := hqgoerrors.Join(err1, err2)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+```
+
 ### Structured Types & Fields
 
 You can classify errors and attach structured data:
@@ -98,7 +133,7 @@ err := hqgoerrors.New("payment declined",
 )
 ```
 
-- Retrieve type:
+- Retrieve:
 
 	```go
 	if e, ok := err.(hqgoerrors.Error); ok {
@@ -156,7 +191,7 @@ func main() {
 	err = hqgoerrors.Wrap(err, "wrap error example 1!")
 	err = hqgoerrors.Wrap(err, "wrap error example 2!", hqgoerrors.WithType("ERROR_TYPE_2"), hqgoerrors.WithField("FIELD_KEY_1", "FIELD_VALUE_1"), hqgoerrors.WithField("FIELD_KEY_2", "FIELD_VALUE_2"))
 
-	formattedStr := hqgoerrors.ToString(err, true)
+	formattedStr := hqgoerrors.ToString(err, hqgoerrors.FormatWithTrace())
 
 	fmt.Println(formattedStr)
 }
@@ -168,25 +203,27 @@ output:
 [ERROR_TYPE_2] wrap error example 2!
 
 Fields:
-  FIELD_KEY_1=FIELD_VALUE_1,  FIELD_KEY_2=FIELD_VALUE_2
+  FIELD_KEY_1: FIELD_VALUE_1
+  FIELD_KEY_2: FIELD_VALUE_2
 
-Stack:
-  main.main:/home/.../hq-go-errors/examples/string_format/main.go:13
+wrap Trace:
+  main.main (/home/.../hq-go-errors/examples/basic/main.go:13)
 
 wrap error example 1!
 
-Stack:
-  main.main:/home/.../hq-go-errors/examples/string_format/main.go:12
+wrap Trace:
+  main.main (/home/.../hq-go-errors/examples/basic/main.go:12)
 
 [ERROR_TYPE] root error example!
 
 Fields:
-  FIELD_KEY_1=FIELD_VALUE_1,  FIELD_KEY_2=FIELD_VALUE_2
+  FIELD_KEY_1: FIELD_VALUE_1
+  FIELD_KEY_2: FIELD_VALUE_2
 
-Stack:
-  main.main:/home/.../hq-go-errors/examples/string_format/main.go:13
-  main.main:/home/.../hq-go-errors/examples/string_format/main.go:12
-  main.main:/home/.../hq-go-errors/examples/string_format/main.go:10
+root Trace:
+  main.main (/home/.../hq-go-errors/examples/basic/main.go:10)
+  main.main (/home/.../hq-go-errors/examples/basic/main.go:12)
+  main.main (/home/.../hq-go-errors/examples/basic/main.go:13)
 ```
 
 #### ... to JSON
@@ -207,7 +244,7 @@ func main() {
 	err = hqgoerrors.Wrap(err, "wrap error example 1!")
 	err = hqgoerrors.Wrap(err, "wrap error example 2!", hqgoerrors.WithType("ERROR_TYPE_2"), hqgoerrors.WithField("FIELD_KEY_1", "FIELD_VALUE_1"), hqgoerrors.WithField("FIELD_KEY_2", "FIELD_VALUE_2"))
 
-	formattedJSON := hqgoerrors.ToJSON(err, true)
+	formattedJSON := hqgoerrors.ToJSON(err, hqgoerrors.FormatWithTrace())
 
 	bytes, _ := json.Marshal(formattedJSON)
 
@@ -219,6 +256,33 @@ output:
 
 ```json
 {
+  "chain": [
+    {
+      "fields": {
+        "FIELD_KEY_1": "FIELD_VALUE_1",
+        "FIELD_KEY_2": "FIELD_VALUE_2"
+      },
+      "message": "wrap error example 2!",
+      "stack": [
+        {
+          "file": "/home/.../hq-go-errors/examples/basic/main.go",
+          "function": "main.main",
+          "line": 13
+        }
+      ],
+      "type": "ERROR_TYPE_2"
+    },
+    {
+      "message": "wrap error example 1!",
+      "stack": [
+        {
+          "file": "/home/.../hq-go-errors/examples/basic/main.go",
+          "function": "main.main",
+          "line": 12
+        }
+      ]
+    }
+  ],
   "root": {
     "fields": {
       "FIELD_KEY_1": "FIELD_VALUE_1",
@@ -226,27 +290,24 @@ output:
     },
     "message": "root error example!",
     "stack": [
-      "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:14",
-      "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:13",
-      "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:11"
+      {
+        "file": "/home/.../hq-go-errors/examples/basic/main.go",
+        "function": "main.main",
+        "line": 10
+      },
+      {
+        "file": "/home/.../hq-go-errors/examples/basic/main.go",
+        "function": "main.main",
+        "line": 12
+      },
+      {
+        "file": "/home/.../hq-go-errors/examples/basic/main.go",
+        "function": "main.main",
+        "line": 13
+      }
     ],
     "type": "ERROR_TYPE"
-  },
-  "wrap": [
-    {
-      "fields": {
-        "FIELD_KEY_1": "FIELD_VALUE_1",
-        "FIELD_KEY_2": "FIELD_VALUE_2"
-      },
-      "message": "wrap error example 2!",
-      "stack": "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:14",
-      "type": "ERROR_TYPE_2"
-    },
-    {
-      "message": "wrap error example 1!",
-      "stack": "main.main:/home/.../hq-go-errors/examples/JSON_format/main.go:13"
-    }
-  ]
+  }
 }
 ```
 
