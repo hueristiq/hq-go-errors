@@ -28,9 +28,9 @@ type StackFrame struct {
 //   - separator (string): delimiter to use between frame components
 //
 // Returns:
-//   - line (string): formatted frame information as a single string
-func (f *StackFrame) format(separator string) (line string) {
-	line = fmt.Sprintf("%s%s%s%s%d", f.Name, separator, f.File, separator, f.Line)
+//   - frame (string): formatted frame information as a single string
+func (f *StackFrame) format(separator string) (frame string) {
+	frame = fmt.Sprintf("%s%s%s%s%d", f.Name, separator, f.File, separator, f.Line)
 
 	return
 }
@@ -53,12 +53,12 @@ type Stack []StackFrame
 //     false for natural (most recent call first)
 //
 // Returns:
-//   - lines ([]string): formatted lines representing each call frame, ordered according
+//   - frames ([]string): formatted lines representing each call frame, ordered according
 //     to the invert parameter
-func (s Stack) format(separator string, invert bool) (lines []string) {
+func (s Stack) format(separator string, invert bool) (frames []string) {
 	n := len(s)
 
-	lines = make([]string, n)
+	frames = make([]string, n)
 
 	for i, f := range s {
 		idx := i
@@ -67,7 +67,7 @@ func (s Stack) format(separator string, invert bool) (lines []string) {
 			idx = n - 1 - i
 		}
 
-		lines[idx] = f.format(separator)
+		frames[idx] = f.format(separator)
 	}
 
 	return
@@ -95,8 +95,15 @@ func (f frame) pc() (PC uintptr) {
 // file, and line information. It performs the same name simplification as
 // stack.resolveToStackFrames() for consistency.
 //
+// The resolution process:
+//  1. Adjusts the PC for runtime lookup.
+//  2. Retrieves the runtime.Frame using runtime.CallersFrames.
+//  3. Simplifies the function name by removing the package path.
+//  4. Constructs and returns the StackFrame.
+//
 // Returns:
-//   - stackFrame (StackFrame): enriched metadata for this call site containing:
+//   - stackFrame (StackFrame): enriched metadata for this call site containing
+//     the simplified function name, source file path, and line number.
 func (f frame) resolveToStackFrame() (stackFrame StackFrame) {
 	PC := f.pc()
 
@@ -181,6 +188,9 @@ func (s *stack) resolveToStackFrames() (stackFrameObjects []StackFrame) {
 //  2. For dual PCs, searches for the second PC in the existing stack
 //     and inserts the first PC before it if found
 //
+// If the wrapPCs slice is empty, no changes are made. If the target PC for dual insertion
+// is not found, no insertion occurs.
+//
 // Parameters:
 //   - wrapPCs (stack): program counters to be merged into the current stack.
 func (s *stack) insertPC(wrapPCs stack) {
@@ -207,6 +217,16 @@ func (s *stack) insertPC(wrapPCs stack) {
 	}
 }
 
+// insert is a helper function that inserts a single uintptr value into a stack slice at a specified index.
+// It creates a new slice with the inserted element while preserving the order of existing elements.
+//
+// Parameters:
+//   - s (stack): the original stack slice to modify
+//   - u (uintptr): the program counter value to insert
+//   - i (int): the index at which to insert the value (must be within 0 to len(s))
+//
+// Returns:
+//   - (stack): a new stack slice with the inserted element
 func insert(s stack, u uintptr, i int) stack {
 	return append(s[:i], append([]uintptr{u}, s[i:]...)...)
 }
@@ -215,6 +235,9 @@ func insert(s stack, u uintptr, i int) stack {
 // This is useful to detect whether an error occurred during package initialization
 // rather than at runtime business logic. It examines each frame's function name
 // looking for runtime initialization markers.
+//
+// The check iterates over resolved frames and looks for a specific runtime function name
+// indicating initialization (case-insensitive comparison).
 //
 // Returns:
 //   - isGlobal (bool): true if the stack originates from a global init function, false otherwise
@@ -236,13 +259,19 @@ func (s *stack) isGlobal() (isGlobal bool) {
 // This is useful for annotating errors with the exact call site in application code.
 // The skip parameter allows control over how many stack frames to ascend.
 //
+// It uses runtime.Caller to retrieve the PC and constructs a frame pointer.
+// If no valid caller is found, it returns nil.
+//
 // Parameters:
 //   - skip (int): number of additional application frames to skip (0 = direct caller)
 //
 // Returns:
 //   - (f *frame): pointer to the resolved frame metadata, or nil if no frames available
 func caller(skip int) (f *frame) {
-	pc, _, _, _ := runtime.Caller(skip)
+	pc, _, _, ok := runtime.Caller(skip)
+	if !ok {
+		return
+	}
 
 	v := frame(pc)
 
@@ -254,6 +283,13 @@ func caller(skip int) (f *frame) {
 // callers captures the full application call stack, filtering out runtime internals.
 // It returns a stack object that can be further resolved or formatted. The skip
 // parameter allows the caller to omit wrapper functions from the trace.
+//
+// The capture process:
+//  1. Uses runtime.Callers to gather up to 64 raw PCs.
+//  2. Filters out invalid entries and runtime-internal functions (those prefixed with "runtime.").
+//  3. Returns a pointer to the filtered stack.
+//
+// If no valid frames are found after filtering, an empty stack is returned.
 //
 // Parameters:
 //   - skip (int): number of initial frames to omit (e.g., error wrapper functions)
